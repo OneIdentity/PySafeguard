@@ -48,7 +48,7 @@ steps:
   displayName: Twine Authenticate 
   inputs:
     artifactFeed: 'OneIdentity'
-    pythonUploadServiceConnection: pypitest
+    pythonUploadServiceConnection: pyppypiTestTaniaitest
 - script: |
       twine upload -r repo-name --config-file $(PYPIRC_PATH) dist/*.whl
   displayName: 'Upload package to Azure Artifact'
