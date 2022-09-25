@@ -1,25 +1,46 @@
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+#[build-system]
+#requires = ["hatchling"]
+#build-backend = "hatchling.build"
 
-[project]
-name = "safeguard-py"
-version = "0.0.1"
-authors = [
-  { name="Dan Peterson", email="Dan.Peterson@oneidentity.com" },
-  { name="Tania Engel", email="tania.engel@oneidentity.com" },
-  { name="Rich Gagliano", email="rich.gagliano@oneidentity.com" },
-]
+#[project]
+#name = "safeguard-py"
+#version = "0.0.1"
+#authors = [
+#  { name="Dan Peterson", email="Dan.Peterson@oneidentity.com" },
+#  { name="Tania Engel", email="tania.engel@oneidentity.com" },
+#  { name="Rich Gagliano", email="rich.gagliano@oneidentity.com" },
+#]
+#description = "One Identity Safeguard Python Package"
+#readme = "README.md"
+#license = { file="LICENSE" }
+#requires-python = ">=3.7"
+#classifiers = [
+#    "Programming Language :: Python :: 3",
+#    "License :: OSI Approved :: Apache Software License",
+#    "Operating System :: OS Independent",
+#]
+
+#[project.urls]
+#"Homepage" = "https://github.com/OneIdentity/PySafeguard"
+#"Bug Tracker" = "https://github.com/OneIdentity/PySafeguard/issues"
+
+[tool.poetry]
+name = "pysafeguard"
 description = "One Identity Safeguard Python Package"
+version = "0.0.1"
 readme = "README.md"
-license = { file="LICENSE" }
-requires-python = ">=3.7"
+keywords = ["safeguard"]
+repository =  "https://github.com/OneIdentity/PySafeguard"
+authors = [
+    "Tania Engel <Tania.Engel@oneidentity.com>",
+    "Rich Gagliano <Rich.Gagliano@oneidentity.com>",
+    "Andy Bradford <Andy.Bradford@oneidentity.com>",
+]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
 ]
 
-[project.urls]
-"Homepage" = "https://github.com/OneIdentity/PySafeguard"
-"Bug Tracker" = "https://github.com/OneIdentity/PySafeguard/issues"
+[tool.poetry.dependencies]
+python = "^3.7"
