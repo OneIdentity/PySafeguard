@@ -37,5 +37,5 @@ steps:
     pythonUploadServiceConnection: pypiTestTania
     
 - script: |
-      twine upload --repository testpypi dist/*.whl
+      twine upload -r "pypiTestTania" --config-file $(PYPIRC_PATH) dist/*.whl
   displayName: 'Upload package to Python'
