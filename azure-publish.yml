@@ -1,0 +1,39 @@
+# Python package
+# Create and test a Python package on multiple Python versions.
+# Add steps that analyze code, save the dist with the build record, publish to a PyPI-compatible index, and more:
+# https://docs.microsoft.com/azure/devops/pipelines/languages/python
+
+trigger:
+- main
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+- task: UsePythonVersion@0
+  inputs:
+     versionSpec: 3.7
+  displayName: 'Use Python 3.7'
+
+- script: |
+    python -m pip install --upgrade pip hatchling wheel
+  displayName: 'Install dependencies'
+
+- script: |
+    python -m pip install -U pip
+    pip install twine
+  displayName: Install software
+
+- script: |
+    py -m build
+  displayName: Build package
+
+- task: TwineAuthenticate@1
+  displayName: Twine Authenticate 
+  inputs:
+    artifactFeed: 'OneIdentity'
+    pythonUploadServiceConnection: pypiTestTania
+    
+- script: |
+      twine upload --repository testpypi dist/*.whl
+  displayName: 'Upload package to Python'
