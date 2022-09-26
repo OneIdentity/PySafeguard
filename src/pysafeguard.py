@@ -7,6 +7,7 @@ class Services(Enum):
     APPLIANCE = 2
     NOTIFICATION = 3
     A2A = 4
+    EVENT = 5
 
     @staticmethod
     def get_path(service):
@@ -15,6 +16,7 @@ class Services(Enum):
             Services.APPLIANCE: 'service/appliance',
             Services.NOTIFICATION: 'service/notification',
             Services.A2A: 'service/a2a',
+            Services.EVENT: 'service/event'
         }.get(service)
 
 class HttpMethods(Enum):
