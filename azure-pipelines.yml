@@ -22,6 +22,7 @@ steps:
 - script: |
     python -m pip install -U pip
     pip install twine
+    pip install artifacts-keyring
     pip install poetry
     poetry install
   displayName: Install software
@@ -33,7 +34,6 @@ steps:
 - task: TwineAuthenticate@1
   displayName: Twine Authenticate 
   inputs:
-    artifactFeed: 'OneIdentity'
     pythonUploadServiceConnection: pypiTestTania
     
 - script: |
