@@ -7,72 +7,71 @@ pool:
 stages:
   - stage: Build
     jobs:
-    - job: Build_Binaries
-      timeoutInMinutes: 90
+    - job: Build_Dist
       displayName: 'Generate drop artifact'
       pool:
-        vmImage: ubuntu-latest
+       vmImage: ubuntu-latest
 
-    steps:
-    - task: UsePythonVersion@0
-      inputs:
-       versionSpec: 3.7
+      steps:
+      - task: UsePythonVersion@0
+        inputs:
+          versionSpec: 3.7
     
-    - script: echo %Action%%BuildVersion%
-    displayName: 'Set build version to $(GitVersion.MajorMinorPatch)'
-      env:
-        Action: '##vso[build.updatebuildnumber]'
-        BuildVersion: $(GitVersion.MajorMinorPatch)
+      - script: echo %Action%%BuildVersion%
+        displayName: 'Set build version to $(GitVersion.MajorMinorPatch)'
+        env:
+          Action: '##vso[build.updatebuildnumber]'
+          BuildVersion: $(GitVersion.MajorMinorPatch)
 
-    - script: |
-        python -m pip install --upgrade pip wheel
-        pip install poetry
-        poetry install
-      displayName: 'Install software'
+      - script: |
+          python -m pip install --upgrade pip wheel
+          pip install poetry
+          poetry install
+        displayName: 'Install software'
 
-    - bash: echo Setting $(BuildVersion) in pyproject.toml using poetry
-    - script: |
-       poetry version $(BuildVersion)
-       poetry build
-      displayName: Build PyPi dist $(BuildVersion)
+      - bash: echo Setting $(BuildVersion) in pyproject.toml using poetry
+      - script: |
+         poetry version $(BuildVersion)
+         poetry build
+        displayName: Build PyPi dist $(BuildVersion)
 
-    - task: CopyFiles@2
-     displayName: 'Copy dist to artifact staging directory'
-    inputs:
-      SourceFolder: '$(build.sourcesdirectory)'
-      Contents: |
-        dist/*
-      TargetFolder: '$(build.artifactstagingdirectory)'
-      condition: succeededOrFailed()
+      - task: CopyFiles@2
+        displayName: 'Copy dist to artifact staging directory'
+        inputs:
+          SourceFolder: '$(build.sourcesdirectory)'
+          Contents: |
+            dist/*
+          TargetFolder: '$(build.artifactstagingdirectory)'
+        condition: succeededOrFailed()
 
-    - task: PublishPipelineArtifact@0
-      displayName: 'Publish pipeline artifact'
-      inputs:
-      artifactName: 'drop'
-      targetPath: '$(Build.ArtifactStagingDirectory)'
-      condition: succeededOrFailed()
+      - task: PublishPipelineArtifact@0
+        displayName: 'Publish pipeline artifact'
+        inputs:
+          artifactName: 'drop'
+          targetPath: '$(Build.ArtifactStagingDirectory)'
+        condition: succeededOrFailed()
     
-    - stage: Release
-      dependsOn: Build
-      condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'), startswith(variables['Build.SourceBranch'], 'refs/heads/release'))
+  - stage: Release
+    dependsOn: Build
+    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'), startswith(variables['Build.SourceBranch'], 'refs/heads/release'))
 
     jobs:
-    - job: Publish to PyPi
-    steps:
-    - download: 'current'
-     artifact: 'drop'
-     displayName: 'Download artifacts'
+    - job: Publish_to_PyPi
+      steps:
+      - download: 'current'
+        artifact: 'drop'
+        displayName: 'Download artifacts'
      
-    - script: |
-      python -m pip install --upgrade pip
-      pip install twine
-    displayName: 'Install twine'
+      - script: |
+          python -m pip install --upgrade pip
+          pip install twine
+        displayName: 'Install twine'
 
-    - task: TwineAuthenticate@1
-      displayName: Twine Authenticate
-      inputs:
-        pythonUploadServiceConnection: testPypiTania
+      - task: TwineAuthenticate@1
+        displayName: Twine Authenticate
+        inputs:
+          pythonUploadServiceConnection: testPypiTania
     
-    - script: |
-      twine upload -r testpypi --verbose --config-file $(PYPIRC_PATH) dist/*
-    displayName: Upload package to testpypi
+      - script: |
+          twine upload -r testpypi --verbose --config-file $(PYPIRC_PATH) dist/*
+        displayName: Upload package to testpypi
