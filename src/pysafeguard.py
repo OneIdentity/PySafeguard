@@ -15,12 +15,6 @@ class HttpMethods:
     PUT = requests.put
     DELETE = requests.delete
 
-def _assemble_path(*args):
-    return '/'.join(map(lambda x: str(x).strip('/'), args))
-
-def _assemble_url(netloc='',path='',query={},fragment='',scheme='https'):
-    return urlunparse((scheme,netloc,path,'',urlencode(query,True),fragment))
-
 class A2ATypes(Enum):
     PASSWORD = 1
     PRIVATEKEY = 2
@@ -29,6 +23,12 @@ class SshKeyFormats(Enum):
     OPENSSH = 1
     SSH2 = 2
     PUTTY = 3
+
+def _assemble_path(*args):
+    return '/'.join(map(lambda x: str(x).strip('/'), args))
+
+def _assemble_url(netloc='',path='',query={},fragment='',scheme='https'):
+    return urlunparse((scheme,netloc,path,'',urlencode(query,True),fragment))
 
 class PySafeguardConnection:
     # TODO: Add constants for services, web methods, etc
