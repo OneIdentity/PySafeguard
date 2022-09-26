@@ -30,7 +30,7 @@ steps:
 - task: TwineAuthenticate@1
   displayName: Twine Authenticate 
   inputs:
-    pythonUploadServiceConnection: pypiTestTania
+    pythonUploadServiceConnection: testPypiTania
 
 - task: CmdLine@2
   inputs:
