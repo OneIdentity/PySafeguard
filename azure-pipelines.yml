@@ -14,47 +14,47 @@ stages:
         vmImage: ubuntu-latest
 
     steps:
-   - task: UsePythonVersion@0
-     inputs:
-      versionSpec: 3.7
+    - task: UsePythonVersion@0
+      inputs:
+       versionSpec: 3.7
     
-   - script: echo %Action%%BuildVersion%
-   displayName: 'Set build version to $(GitVersion.MajorMinorPatch)'
-     env:
-       Action: '##vso[build.updatebuildnumber]'
-       BuildVersion: $(GitVersion.MajorMinorPatch)
+    - script: echo %Action%%BuildVersion%
+    displayName: 'Set build version to $(GitVersion.MajorMinorPatch)'
+      env:
+        Action: '##vso[build.updatebuildnumber]'
+        BuildVersion: $(GitVersion.MajorMinorPatch)
 
-   - script: |
-       python -m pip install --upgrade pip wheel
-       pip install poetry
-       poetry install
-   displayName: 'Install software'
+    - script: |
+        python -m pip install --upgrade pip wheel
+        pip install poetry
+        poetry install
+      displayName: 'Install software'
 
-   - bash: echo Setting $(BuildVersion) in pyproject.toml using poetry
-   - script: |
+    - bash: echo Setting $(BuildVersion) in pyproject.toml using poetry
+    - script: |
        poetry version $(BuildVersion)
        poetry build
-     displayName: Build PyPi dist $(BuildVersion)
+      displayName: Build PyPi dist $(BuildVersion)
 
-   - task: CopyFiles@2
-    displayName: 'Copy dist to artifact staging directory'
-   inputs:
+    - task: CopyFiles@2
+     displayName: 'Copy dist to artifact staging directory'
+    inputs:
       SourceFolder: '$(build.sourcesdirectory)'
       Contents: |
         dist/*
       TargetFolder: '$(build.artifactstagingdirectory)'
       condition: succeededOrFailed()
 
-   - task: PublishPipelineArtifact@0
+    - task: PublishPipelineArtifact@0
       displayName: 'Publish pipeline artifact'
-     inputs:
-     artifactName: 'drop'
-     targetPath: '$(Build.ArtifactStagingDirectory)'
-     condition: succeededOrFailed()
+      inputs:
+      artifactName: 'drop'
+      targetPath: '$(Build.ArtifactStagingDirectory)'
+      condition: succeededOrFailed()
     
-   - stage: Release
-     dependsOn: Build
-     condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'), startswith(variables['Build.SourceBranch'], 'refs/heads/release'))
+    - stage: Release
+      dependsOn: Build
+      condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'), startswith(variables['Build.SourceBranch'], 'refs/heads/release'))
 
     jobs:
     - job: Publish to PyPi
