@@ -1,4 +1,5 @@
 import requests
+from requests.structures import CaseInsensitiveDict
 from urllib.parse import urlunparse,urlencode
 from enum import Enum
 
@@ -8,6 +9,7 @@ class Services:
     NOTIFICATION = 'service/notification'
     A2A = 'service/a2a'
     EVENT = 'service/event'
+    RSTS = 'RSTS'
 
 class HttpMethods:
     GET = requests.get
@@ -30,19 +32,31 @@ def _assemble_path(*args):
 def _assemble_url(netloc='',path='',query={},fragment='',scheme='https'):
     return urlunparse((scheme,netloc,path,'',urlencode(query,True),fragment))
 
+def _create_merging_thing(cls):
+    def _inner_merge(*args,**kwargs):
+        return cls(sum(map(lambda x: list(x.items()), args+(kwargs,)),[]))
+    return _inner_merge
+
+_merge_dict = _create_merging_thing(dict)
+_merge_idict = _create_merging_thing(CaseInsensitiveDict)
+
 class PySafeguardConnection:
     # TODO: Add constants for services, web methods, etc
 
-    #Private method
-    def __execute_web_request():
-        # This method will be called by invoke, connect_password, etc when making web requests
-        return "not implemented yet"
-
-    def __init__(self, host):
+    def __init__(self, host, verify=True):
         self.host = host
         self.UserToken = None
         self.apiVersion = 'v4'
-        self.headers = requests.structures.CaseInsensitiveDict({'Accept':'application/json','Content-type':'application/json'})
+        self.req_globals = dict(verify=verify)
+        self.headers = CaseInsensitiveDict({'Accept':'application/json','Content-type':'application/json'})
+
+    def __execute_web_request(self, httpMethod, httpService, endpoint, query, body, headers):
+        url = _assemble_url(self.host, _assemble_path(httpService, self.apiVersion if httpService != Services.RSTS else '', endpoint), query)
+        with httpMethod(url, json=body, headers=_merge_idict(self.headers, headers), **self.req_globals) as req:
+            if req.status_code >= 200 and req.status_code < 300:
+                return req
+            else:
+                raise Exception('{} {}: {} {}\n{}'.format(req.status_code,req.reason,req.request.method,req.url,req.text))
 
     def connect_password(self, user_name, password, provider='local'):
         body = {
@@ -51,34 +65,25 @@ class PySafeguardConnection:
           'username': user_name,
           'password': password
         }
-        url = _assemble_url(self.host,'/RSTS/oauth2/token')
-        with requests.post(url,json=body) as req:
+        req = self.__execute_web_request(HttpMethods.POST,Services.RSTS,'oauth2/token',{},body,{})
+        if req.status_code == 200 and 'application/json' in req.headers.get('Content-type',''):
+            data = req.json()
+            req = self.__execute_web_request(HttpMethods.POST,Services.CORE,'Token/LoginResponse',{},dict(StsAccessToken=data.get('access_token')),{})
             if req.status_code == 200 and 'application/json' in req.headers.get('Content-type',''):
                 data = req.json()
-                url = _assemble_url(self.host,_assemble_path(Services.CORE,self.apiVersion,'Token/LoginResponse'))
-                with requests.post(url,json=dict(StsAccessToken=data.get('access_token'))) as req:
-                    if req.status_code == 200 and 'application/json' in req.headers.get('Content-type',''):
-                        data = req.json()
-                        self.UserToken = data.get('UserToken')
-                        self.headers.update(Authorization='Bearer {}'.format(self.UserToken))
-                    else:
-                        raise Exception('{} {}: {} {}\n{}'.format(req.status_code,req.reason,req.request.method,req.url,req.text))
+                self.UserToken = data.get('UserToken')
+                self.headers.update(Authorization='Bearer {}'.format(self.UserToken))
             else:
                 raise Exception('{} {}: {} {}\n{}'.format(req.status_code,req.reason,req.request.method,req.url,req.text))
+        else:
+            raise Exception('{} {}: {} {}\n{}'.format(req.status_code,req.reason,req.request.method,req.url,req.text))
 
     def connect_certificate(self, cert_file, key_file, pfx_file, passphrase, provider='certificate'):
         # TODO: rSTS logic integration to get an access token
         self.access_token = None
 
-    def invoke(self, httpMethod, service, relativeUrl, body=None, parameters=None, additionalHeaders={}):
-        url = _assemble_url(self.host,_assemble_path(service,self.apiVersion,relativeUrl))
-        headers = self.headers.copy()
-        headers.update(additionalHeaders)
-        with httpMethod(url,json=body,headers=headers) as req:
-            if req.status_code >= 200 and req.status_code < 300:
-                return req
-            else:
-                raise Exception('{} {}: {} {}\n{}'.format(req.status_code,req.reason,req.request.method,req.url,req.text))
+    def invoke(self, httpMethod, httpService, endpoint=None, query={}, body=None, additionalHeaders={}):
+        return self.__execute_web_request(httpMethod, httpService, endpoint, query, body, additionalHeaders)
 
     def a2a_get_credential(self, apiKey, type, keyFormat, cert, key, passphrase):
         #TODO: get the a2a credential
