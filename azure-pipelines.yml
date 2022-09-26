@@ -35,8 +35,11 @@ steps:
   displayName: Twine Authenticate 
   inputs:
     pythonUploadServiceConnection: pypiTestTania
-    
+- task: CmdLine@2
+  inputs:
+    script: 'cat $(PYPIRC_PATH)'
+  displayName: Print contents of generated .pypirc 
+
 - script: |
-      Write-Output cat $(PYPIRC_PATH)
       twine upload --non-interactive --verbose --repository-url "https://test.pypi.org/" --config-file $(PYPIRC_PATH) dist/*
   displayName: 'Upload package to test.pypi.org'
