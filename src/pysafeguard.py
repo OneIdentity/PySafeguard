@@ -47,8 +47,6 @@ class SshKeyFormats(Enum):
     SSH2 = 2
     PUTTY = 3
 
->>>>>>> 91b3529846945ff2414af7339fa95c773f005a32
-
 class PySafeguardConnection:
     # TODO: Add constants for services, web methods, etc
 
@@ -118,10 +116,6 @@ class PySafeguardConnection:
         if keyFormat == None or keyFormat == "":
             keyFormat = SshKeyFormats.OPENSSH
 
-
-
-
->>>>>>> 91b3529846945ff2414af7339fa95c773f005a32
 
     def a2a_get_credential_from_files(self, apiKey, type, keyFormat, certFile, keyFile, passphrase):
         '''(Public) Retrieves an application to application credential.
