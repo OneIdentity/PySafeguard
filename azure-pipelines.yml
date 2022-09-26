@@ -1,0 +1,42 @@
+# Python package
+# Create and test a Python package on multiple Python versions.
+# Add steps that analyze code, save the dist with the build record, publish to a PyPI-compatible index, and more:
+# https://docs.microsoft.com/azure/devops/pipelines/languages/python
+
+trigger:
+- main
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+- task: UsePythonVersion@0
+  inputs:
+     versionSpec: 3.7
+  displayName: 'Use Python 3.7'
+
+- script: |
+    python -m pip install --upgrade pip wheel
+    pip install twine
+    pip install artifacts-keyring
+    pip install poetry
+    poetry install
+  displayName: 'Install software'
+
+- script: |
+    poetry build
+  displayName: Build package
+
+- task: TwineAuthenticate@1
+  displayName: Twine Authenticate 
+  inputs:
+    pythonUploadServiceConnection: pypiTestTania
+
+- task: CmdLine@2
+  inputs:
+    script: 'cat $(PYPIRC_PATH)'
+  displayName: Print contents of generated .pypirc 
+
+- script: |
+      twine upload --verbose --config-file $(PYPIRC_PATH) dist/*
+  displayName: 'Upload package to test.pypi.org'
