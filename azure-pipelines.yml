@@ -5,14 +5,15 @@ pool:
   vmImage: ubuntu-latest
 
 stages:
- - stage: Build
-   jobs:
-   - job: Build_Dist
+  - stage: Build
+    jobs:
+    - job: Build_Binaries
+      timeoutInMinutes: 90
       displayName: 'Generate drop artifact'
       pool:
         vmImage: ubuntu-latest
 
-   steps:
+    steps:
    - task: UsePythonVersion@0
      inputs:
       versionSpec: 3.7
@@ -46,32 +47,32 @@ stages:
 
    - task: PublishPipelineArtifact@0
       displayName: 'Publish pipeline artifact'
-    inputs:
-    artifactName: 'drop'
-    targetPath: '$(Build.ArtifactStagingDirectory)'
-    condition: succeededOrFailed()
+     inputs:
+     artifactName: 'drop'
+     targetPath: '$(Build.ArtifactStagingDirectory)'
+     condition: succeededOrFailed()
     
- - stage: Release
-    dependsOn: Build
-    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'), startswith(variables['Build.SourceBranch'], 'refs/heads/release'))
+   - stage: Release
+     dependsOn: Build
+     condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'), startswith(variables['Build.SourceBranch'], 'refs/heads/release'))
 
-   jobs:
-   - job: Publish to PyPi
-   steps:
-   - download: 'current'
+    jobs:
+    - job: Publish to PyPi
+    steps:
+    - download: 'current'
      artifact: 'drop'
      displayName: 'Download artifacts'
      
-   - script: |
+    - script: |
       python -m pip install --upgrade pip
       pip install twine
     displayName: 'Install twine'
 
-   - task: TwineAuthenticate@1
-    displayName: Twine Authenticate
-    inputs:
-      pythonUploadServiceConnection: testPypiTania
+    - task: TwineAuthenticate@1
+      displayName: Twine Authenticate
+      inputs:
+        pythonUploadServiceConnection: testPypiTania
     
-   - script: |
+    - script: |
       twine upload -r testpypi --verbose --config-file $(PYPIRC_PATH) dist/*
     displayName: Upload package to testpypi
