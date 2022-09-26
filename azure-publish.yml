@@ -37,5 +37,5 @@ steps:
   displayName: Print contents of generated .pypirc 
 
 - script: |
-      twine upload --verbose --config-file $(PYPIRC_PATH) dist/*
-  displayName: 'Upload package to test.pypi.org'
+      twine upload -r testpypi --verbose --config-file $(PYPIRC_PATH) dist/*
+  displayName: Upload package to testpypi
