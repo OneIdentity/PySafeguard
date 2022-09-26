@@ -16,16 +16,12 @@ steps:
   displayName: 'Use Python 3.7'
 
 - script: |
-    python -m pip install --upgrade pip hatchling wheel
-  displayName: 'Install dependencies'
-
-- script: |
-    python -m pip install -U pip
+    python -m pip install --upgrade pip wheel
     pip install twine
     pip install artifacts-keyring
     pip install poetry
     poetry install
-  displayName: Install software
+  displayName: 'Install software'
 
 - script: |
     poetry build
@@ -35,11 +31,12 @@ steps:
   displayName: Twine Authenticate 
   inputs:
     pythonUploadServiceConnection: pypiTestTania
+
 - task: CmdLine@2
   inputs:
     script: 'cat $(PYPIRC_PATH)'
   displayName: Print contents of generated .pypirc 
 
 - script: |
-      twine upload --non-interactive --verbose --repository-url "https://test.pypi.org/" --config-file $(PYPIRC_PATH) dist/*
+      twine upload --verbose --config-file $(PYPIRC_PATH) dist/*
   displayName: 'Upload package to test.pypi.org'
