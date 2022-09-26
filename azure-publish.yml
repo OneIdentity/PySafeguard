@@ -27,7 +27,7 @@ steps:
   displayName: Build package
 
 - task: TwineAuthenticate@1
-  displayName: Twine Authenticate to testpypi using Service Connection
+  displayName: Twine Authenticate to testpypi using Service Connection and username __token__
   inputs:
     pythonUploadServiceConnection: testPypiTania
     
