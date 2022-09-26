@@ -35,7 +35,7 @@ class HttpMethods(Enum):
         }.get(method)
 
 def _assemble_path(*args):
-    return '/'.join(args)
+    return '/'.join(map(lambda x: str(x).strip('/'), args))
 
 def _assemble_url(netloc='',path='',query={},fragment='',scheme='https'):
     return urlunparse((scheme,netloc,path,'',urlencode(query,True),fragment))
