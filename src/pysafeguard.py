@@ -2,37 +2,18 @@ import requests
 from urllib.parse import urlunparse,urlencode
 from enum import Enum
 
-class Services(Enum):
-    CORE = 1
-    APPLIANCE = 2
-    NOTIFICATION = 3
-    A2A = 4
-    EVENT = 5
+class Services:
+    CORE = 'service/core'
+    APPLIANCE = 'service/appliance'
+    NOTIFICATION = 'service/notification'
+    A2A = 'service/a2a'
+    EVENT = 'service/event'
 
-    @staticmethod
-    def get_path(service):
-        return {
-            Services.CORE: 'service/core',
-            Services.APPLIANCE: 'service/appliance',
-            Services.NOTIFICATION: 'service/notification',
-            Services.A2A: 'service/a2a',
-            Services.EVENT: 'service/event'
-        }.get(service)
-
-class HttpMethods(Enum):
-    GET = 1
-    POST = 2
-    PUT = 3
-    DELETE = 4
-
-    @staticmethod
-    def get_method(method):
-        return {
-            HttpMethods.GET: requests.get,
-            HttpMethods.POST: requests.post,
-            HttpMethods.PUT: requests.put,
-            HttpMethods.DELETE: requests.delete,
-        }.get(method)
+class HttpMethods:
+    GET = requests.get
+    POST = requests.post
+    PUT = requests.put
+    DELETE = requests.delete
 
 def _assemble_path(*args):
     return '/'.join(map(lambda x: str(x).strip('/'), args))
@@ -74,7 +55,7 @@ class PySafeguardConnection:
         with requests.post(url,json=body) as req:
             if req.status_code == 200 and 'application/json' in req.headers.get('Content-type',''):
                 data = req.json()
-                url = _assemble_url(self.host,_assemble_path(Services.get_path(Services.CORE),self.apiVersion,'Token/LoginResponse'))
+                url = _assemble_url(self.host,_assemble_path(Services.CORE,self.apiVersion,'Token/LoginResponse'))
                 with requests.post(url,json=dict(StsAccessToken=data.get('access_token'))) as req:
                     if req.status_code == 200 and 'application/json' in req.headers.get('Content-type',''):
                         data = req.json()
@@ -90,10 +71,10 @@ class PySafeguardConnection:
         self.access_token = None
 
     def invoke(self, httpMethod, service, relativeUrl, body=None, parameters=None, additionalHeaders={}):
-        url = _assemble_url(self.host,_assemble_path(Services.get_path(service),self.apiVersion,relativeUrl))
+        url = _assemble_url(self.host,_assemble_path(service,self.apiVersion,relativeUrl))
         headers = self.headers.copy()
         headers.update(additionalHeaders)
-        with HttpMethods.get_method(httpMethod)(url,json=body,headers=headers) as req:
+        with httpMethod(url,json=body,headers=headers) as req:
             if req.status_code >= 200 and req.status_code < 300:
                 return req
             else:
