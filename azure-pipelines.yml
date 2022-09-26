@@ -34,6 +34,11 @@ steps:
 
 - task: CmdLine@2
   inputs:
+    script: 'keyring --disable '
+  displayName: Disable keyring when using Twine Authenticate 
+
+- task: CmdLine@2
+  inputs:
     script: 'cat $(PYPIRC_PATH)'
   displayName: Print contents of generated .pypirc 
 
