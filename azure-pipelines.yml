@@ -1,8 +1,3 @@
-# Python package
-# Create and test a Python package on multiple Python versions.
-# Add steps that analyze code, save the dist with the build record, publish to a PyPI-compatible index, and more:
-# https://docs.microsoft.com/azure/devops/pipelines/languages/python
-
 trigger:
 - main
 
@@ -12,71 +7,71 @@ pool:
 stages:
  - stage: Build
    jobs:
-  - job: Build_Dist
-  displayName: 'Generate drop artifact'
-  pool:
-    vmImage: ubuntu-latest
+   - job: Build_Dist
+      displayName: 'Generate drop artifact'
+      pool:
+        vmImage: ubuntu-latest
 
-  steps:
-  - task: UsePythonVersion@0
-  inputs:
-  versionSpec: 3.7
-
-  - script: |
-     python -m pip install --upgrade pip wheel
-     pip install poetry
-     poetry install
-    displayName: 'Install software'
+   steps:
+   - task: UsePythonVersion@0
+     inputs:
+      versionSpec: 3.7
     
-  - script: echo %Action%%BuildVersion%
-  displayName: 'Set build version to $(GitVersion.MajorMinorPatch)'
-  env:
-    Action: '##vso[build.updatebuildnumber]'
-    BuildVersion: $(GitVersion.MajorMinorPatch)
-    
-  - bash: echo Setting $(BuildVersion) in pyproject.toml using poetry
-  - script: |
-     poetry version $(BuildVersion)
-     poetry build
-    displayName: Build PyPi dist $(BuildVersion)
+   - script: echo %Action%%BuildVersion%
+   displayName: 'Set build version to $(GitVersion.MajorMinorPatch)'
+     env:
+       Action: '##vso[build.updatebuildnumber]'
+       BuildVersion: $(GitVersion.MajorMinorPatch)
 
-  - task: CopyFiles@2
+   - script: |
+       python -m pip install --upgrade pip wheel
+       pip install poetry
+       poetry install
+   displayName: 'Install software'
+
+   - bash: echo Setting $(BuildVersion) in pyproject.toml using poetry
+   - script: |
+       poetry version $(BuildVersion)
+       poetry build
+     displayName: Build PyPi dist $(BuildVersion)
+
+   - task: CopyFiles@2
     displayName: 'Copy dist to artifact staging directory'
-  inputs:
-  SourceFolder: '$(build.sourcesdirectory)'
-  Contents: |
-    dist/*
-  TargetFolder: '$(build.artifactstagingdirectory)'
-  condition: succeededOrFailed()
+   inputs:
+      SourceFolder: '$(build.sourcesdirectory)'
+      Contents: |
+        dist/*
+      TargetFolder: '$(build.artifactstagingdirectory)'
+      condition: succeededOrFailed()
 
-  - task: PublishPipelineArtifact@0
-    displayName: 'Publish pipeline artifact'
-  inputs:
+   - task: PublishPipelineArtifact@0
+      displayName: 'Publish pipeline artifact'
+    inputs:
     artifactName: 'drop'
     targetPath: '$(Build.ArtifactStagingDirectory)'
-  condition: succeededOrFailed()
-
+    condition: succeededOrFailed()
+    
  - stage: Release
     dependsOn: Build
     condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'), startswith(variables['Build.SourceBranch'], 'refs/heads/release'))
 
-    jobs:
-  - job: Publish to PyPi
-  steps:
-  - download: 'current'
-    artifact: 'drop'
-    displayName: 'Download artifacts'
+   jobs:
+   - job: Publish to PyPi
+   steps:
+   - download: 'current'
+     artifact: 'drop'
+     displayName: 'Download artifacts'
      
-  - script: |
-    python -m pip install --upgrade pip
-    pip install twine
+   - script: |
+      python -m pip install --upgrade pip
+      pip install twine
     displayName: 'Install twine'
 
-  - task: TwineAuthenticate@1
-  displayName: Twine Authenticate
-  inputs:
-    pythonUploadServiceConnection: testPypiTania
+   - task: TwineAuthenticate@1
+    displayName: Twine Authenticate
+    inputs:
+      pythonUploadServiceConnection: testPypiTania
     
-  - script: |
+   - script: |
       twine upload -r testpypi --verbose --config-file $(PYPIRC_PATH) dist/*
-  displayName: Upload package to testpypi
+    displayName: Upload package to testpypi
