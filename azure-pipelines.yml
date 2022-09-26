@@ -9,36 +9,74 @@ trigger:
 pool:
   vmImage: ubuntu-latest
 
-steps:
-- task: UsePythonVersion@0
-  inputs:
-     versionSpec: 3.7
-  displayName: 'Use Python 3.7'
+stages:
+ - stage: Build
+   jobs:
+  - job: Build_Dist
+  displayName: 'Generate drop artifact'
+  pool:
+    vmImage: ubuntu-latest
 
-- script: |
-    python -m pip install --upgrade pip wheel
-    pip install poetry
-    poetry install
-  displayName: 'Install software'
-
-- script: echo current version is $(GitVersion.MajorMinorPatch)
-- script: |
-    poetry build
-  displayName: Build package
-  
-- task: CopyFiles@2
-  displayName: 'Copy files to artifact staging directory'
+  steps:
+  - task: UsePythonVersion@0
   inputs:
-    SourceFolder: '$(build.sourcesdirectory)'
-    Contents: |
-      dist/*
-    TargetFolder: '$(build.artifactstagingdirectory)'
+  versionSpec: 3.7
+
+  - script: |
+     python -m pip install --upgrade pip wheel
+     pip install poetry
+     poetry install
+    displayName: 'Install software'
+    
+  - script: echo %Action%%BuildVersion%
+  displayName: 'Set build version to $(GitVersion.MajorMinorPatch)'
+  env:
+    Action: '##vso[build.updatebuildnumber]'
+    BuildVersion: $(GitVersion.MajorMinorPatch)
+    
+  - bash: echo Setting $(BuildVersion) in pyproject.toml using poetry
+  - script: |
+     poetry version $(BuildVersion)
+     poetry build
+    displayName: Build PyPi dist $(BuildVersion)
+
+  - task: CopyFiles@2
+    displayName: 'Copy dist to artifact staging directory'
+  inputs:
+  SourceFolder: '$(build.sourcesdirectory)'
+  Contents: |
+    dist/*
+  TargetFolder: '$(build.artifactstagingdirectory)'
   condition: succeededOrFailed()
 
-- task: PublishPipelineArtifact@0
-  displayName: 'Publish pipeline artifact'
+  - task: PublishPipelineArtifact@0
+    displayName: 'Publish pipeline artifact'
   inputs:
     artifactName: 'drop'
     targetPath: '$(Build.ArtifactStagingDirectory)'
   condition: succeededOrFailed()
 
+ - stage: Release
+    dependsOn: Build
+    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'), startswith(variables['Build.SourceBranch'], 'refs/heads/release'))
+
+    jobs:
+  - job: Publish to PyPi
+  steps:
+  - download: 'current'
+    artifact: 'drop'
+    displayName: 'Download artifacts'
+     
+  - script: |
+    python -m pip install --upgrade pip
+    pip install twine
+    displayName: 'Install twine'
+
+  - task: TwineAuthenticate@1
+  displayName: Twine Authenticate
+  inputs:
+    pythonUploadServiceConnection: testPypiTania
+    
+  - script: |
+      twine upload -r testpypi --verbose --config-file $(PYPIRC_PATH) dist/*
+  displayName: Upload package to testpypi
