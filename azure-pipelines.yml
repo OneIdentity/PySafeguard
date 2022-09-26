@@ -17,31 +17,28 @@ steps:
 
 - script: |
     python -m pip install --upgrade pip wheel
-    pip install twine
-    pip install artifacts-keyring
     pip install poetry
     poetry install
   displayName: 'Install software'
 
+- script: echo current version is $(GitVersion.MajorMinorPatch)
 - script: |
     poetry build
   displayName: Build package
-
-- task: TwineAuthenticate@1
-  displayName: Twine Authenticate 
+  
+- task: CopyFiles@2
+  displayName: 'Copy files to artifact staging directory'
   inputs:
-    pythonUploadServiceConnection: pypiTestTania
+    SourceFolder: '$(build.sourcesdirectory)'
+    Contents: |
+      dist/*
+    TargetFolder: '$(build.artifactstagingdirectory)'
+  condition: succeededOrFailed()
 
-- task: CmdLine@2
+- task: PublishPipelineArtifact@0
+  displayName: 'Publish pipeline artifact'
   inputs:
-    script: 'keyring --disable '
-  displayName: Disable keyring when using Twine Authenticate 
+    artifactName: 'drop'
+    targetPath: '$(Build.ArtifactStagingDirectory)'
+  condition: succeededOrFailed()
 
-- task: CmdLine@2
-  inputs:
-    script: 'cat $(PYPIRC_PATH)'
-  displayName: Print contents of generated .pypirc 
-
-- script: |
-      twine upload --verbose --config-file $(PYPIRC_PATH) dist/*
-  displayName: 'Upload package to test.pypi.org'
