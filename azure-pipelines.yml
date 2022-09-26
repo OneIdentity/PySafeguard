@@ -16,29 +16,27 @@ steps:
   displayName: 'Use Python 3.7'
 
 - script: |
-    python -m pip install --upgrade pip  setuptools wheel
-    pip install -r requirements.txt
-  displayName: 'Install dependencies'
-
-- script: |
-    python -m pip install -U pip
-    pip install poetry
+    python -m pip install --upgrade pip wheel
     pip install twine
+    pip install artifacts-keyring
+    pip install poetry
     poetry install
-  displayName: Install software
-
-- script: |
-    poetry run python -m unittest discover tests/ -v
-  displayName: Test software
+  displayName: 'Install software'
 
 - script: |
     poetry build
   displayName: Build package
+
 - task: TwineAuthenticate@1
   displayName: Twine Authenticate 
   inputs:
-    artifactFeed: 'OneIdentity'
     pythonUploadServiceConnection: pypiTestTania
+
+- task: CmdLine@2
+  inputs:
+    script: 'cat $(PYPIRC_PATH)'
+  displayName: Print contents of generated .pypirc 
+
 - script: |
-      twine upload -r repo-name --config-file $(PYPIRC_PATH) dist/*.whl
-  displayName: 'Upload package to Azure Artifact'
+      twine upload --verbose --config-file $(PYPIRC_PATH) dist/*
+  displayName: 'Upload package to test.pypi.org'
