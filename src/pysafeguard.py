@@ -121,9 +121,6 @@ class PySafeguardConnection:
         return PySafeguardConnection.__execute_web_request(httpMethod, url, body, merged_headers, **self.req_globals)
 
     def a2a_get_credential(self, apiKey, type, keyFormat, cert, key):
-        #TODO: get the a2a credential
-        # Example:
-        # let credential = await SafeguardJs._executePromise(`https://${hostName}/service/a2a/v3/Credentials?type=${type}&keyFormat=${keyFormat}`, SafeguardJs.HttpMethods.GET, null, 'json', additionalHeaders, null, null, httpsAgent);
         if not apiKey:
             raise Exception("apiKey may not be null or empty")
 
