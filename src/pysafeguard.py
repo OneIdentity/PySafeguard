@@ -57,12 +57,12 @@ class PySafeguardConnection:
         self.req_globals = dict(verify=verify,cert=None)
         self.headers = CaseInsensitiveDict({'Accept':'application/json','Content-type':'application/json'})
 
-    def __execute_web_request(self, httpMethod, httpService, endpoint, query, body, headers):
+    def __execute_web_request(self, httpMethod, httpService, endpoint, query, body, headers, cert=None):
         url = _assemble_url(self.host, _assemble_path(httpService, self.apiVersion if httpService != Services.RSTS else '', endpoint), query)
         merged_headers = _merge_idict(self.headers, headers)
         dojson = 'application/json' in merged_headers.get('content-type','').lower()
         bodytype = dict(json=body) if dojson else dict(data=body)
-        with httpMethod(url, headers=merged_headers, **_merge_dict(self.req_globals, bodytype)) as req:
+        with httpMethod(url, headers=merged_headers, **_merge_dict(self.req_globals, bodytype, cert=cert)) as req:
             if req.status_code >= 200 and req.status_code < 300:
                 return req
             else:
@@ -112,37 +112,40 @@ class PySafeguardConnection:
                 self.UserToken = data.get('UserToken')
                 self.headers.update(Authorization='Bearer {}'.format(self.UserToken))
             else:
-                raise Exception('{} {}: {} {}\n{}'.format(req.status_code,req.reason,req.request.method,req.url,req.text))
+                raise WebRequestError(req)
         else:
-            raise Exception('{} {}: {} {}\n{}'.format(req.status_code,req.reason,req.request.method,req.url,req.text))
+            raise WebRequestError(req)
 
     def invoke(self, httpMethod, httpService, endpoint=None, query={}, body=None, additionalHeaders={}):
         return self.__execute_web_request(httpMethod, httpService, endpoint, query, body, additionalHeaders)
 
-    def a2a_get_credential(self, apiKey, type, keyFormat):
+    def a2a_get_credential(self, apiKey, type, keyFormat, cert, key):
         #TODO: get the a2a credential
         # Example:
         # let credential = await SafeguardJs._executePromise(`https://${hostName}/service/a2a/v3/Credentials?type=${type}&keyFormat=${keyFormat}`, SafeguardJs.HttpMethods.GET, null, 'json', additionalHeaders, null, null, httpsAgent);
-        if apiKey == None or apiKey == "":
+        if not apiKey:
             raise Exception("apiKey may not be null or empty")
 
-        if type == None or type == "":
+        if not type:
             raise Exception("type may not be null or empty")
+        
+        if not cert and not key:
+            raise Exception("cert path and key path may not be null or empty")
 
-        if keyFormat == None or keyFormat == "":
+        if not keyFormat:
             keyFormat = SshKeyFormats.OPENSSH
 
-        try:
-            header = {
-                'authorization': 'A2A {}'.format(apiKey)
-            }
-            query = {
-                'type': type,
-                'keyFormat': keyFormat
-            }
-            return self.__execute_web_request(HttpMethods.GET, Services.A2A, endpoint="Credentials", query=query, body={}, headers=header)
-        except:
-            raise Exception("Failed to retrieve credentials")
+        header = {
+            'authorization': 'A2A {}'.format(apiKey)
+        }
+        query = {
+            'type': type,
+            'keyFormat': keyFormat
+        }
+        credentials = self.__execute_web_request(HttpMethods.GET, Services.A2A, endpoint="Credentials", query=query, body={}, headers=header, cert=(cert, key))
+        if credentials.status_code != 200:
+            raise WebRequestError(credentials)
+        return credentials.json()
 
     def register_signalr(self, callback):
         #TODO: register the signalr callback
