@@ -120,9 +120,13 @@ class PySafeguardConnection:
         return self.__execute_web_request(httpMethod, httpService, endpoint, query, body, additionalHeaders)
 
     def a2a_get_credential(self, apiKey, type, keyFormat, cert, key):
-        #TODO: get the a2a credential
-        # Example:
-        # let credential = await SafeguardJs._executePromise(`https://${hostName}/service/a2a/v3/Credentials?type=${type}&keyFormat=${keyFormat}`, SafeguardJs.HttpMethods.GET, null, 'json', additionalHeaders, null, null, httpsAgent);
+        '''(Public) Retrieves an application to application credential.
+        * @param {string}              apiKey      (Required) The a2a api key.
+        * @param {string}              type        (Required) The type of credential to retrieve (password, privatekey, etc).
+        * @param {string}              keyFormat   (Optional) The privateKeyFormat to return (openssh, ssh2, putty, etc). Defaults to openssh.
+        * @param {string}              cert        (Required) The user certificate file location in pem format.
+        * @param {string}              key         (Required) The user certificate's key file location in key format.
+        '''
         if not apiKey:
             raise Exception("apiKey may not be null or empty")
 
