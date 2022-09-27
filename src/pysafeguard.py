@@ -120,11 +120,12 @@ class PySafeguardConnection:
         merged_headers = _merge_idict(self.headers, additionalHeaders)
         return PySafeguardConnection.__execute_web_request(httpMethod, url, body, merged_headers, **self.req_globals)
 
-    def a2a_get_credential(self, apiKey, type, keyFormat, cert, key):
+    @staticmethod
+    def a2a_get_credential(host, apiKey, a2aType, keyFormat, verify, cert, key):
         if not apiKey:
             raise Exception("apiKey may not be null or empty")
 
-        if not type:
+        if not a2aType:
             raise Exception("type may not be null or empty")
         
         if not cert and not key:
@@ -134,13 +135,13 @@ class PySafeguardConnection:
             keyFormat = SshKeyFormats.OPENSSH
 
         header = {
-            'authorization': 'A2A {}'.format(apiKey)
+            'Authorization': 'A2A {}'.format(apiKey)
         }
         query = {
-            'type': type,
+            'type': a2aType,
             'keyFormat': keyFormat
         }
-        credentials = self.__execute_web_request(HttpMethods.GET, Services.A2A, endpoint="Credentials", query=query, body={}, headers=header, cert=(cert, key))
+        credentials = PySafeguardConnection.__execute_web_request(HttpMethods.GET, _assemble_url(host, _assemble_path(Services.A2A, endpoint="Credentials"), query), body={}, headers=header, verify=verify, cert=(cert, key))
         if credentials.status_code != 200:
             raise WebRequestError(credentials)
         return credentials.json()
