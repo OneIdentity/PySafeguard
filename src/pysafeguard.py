@@ -121,7 +121,7 @@ class PySafeguardConnection:
         return PySafeguardConnection.__execute_web_request(httpMethod, url, body, merged_headers, **self.req_globals)
 
     @staticmethod
-    def a2a_get_credential(host, apiKey, a2aType, keyFormat, cert, key, verify=True):
+    def a2a_get_credential(host, apiKey, a2aType, keyFormat, cert, key, apiVersion='v4', verify=True):
         if not apiKey:
             raise Exception("apiKey may not be null or empty")
 
@@ -141,7 +141,7 @@ class PySafeguardConnection:
             'type': a2aType,
             'keyFormat': keyFormat
         }
-        credentials = PySafeguardConnection.__execute_web_request(HttpMethods.GET, _assemble_url(host, _assemble_path(Services.A2A, "Credentials"), query), body={}, headers=header, verify=verify, cert=(cert, key))
+        credentials = PySafeguardConnection.__execute_web_request(HttpMethods.GET, _assemble_url(host, _assemble_path(Services.A2A, apiVersion, "Credentials"), query), body={}, headers=header, verify=verify, cert=(cert, key))
         if credentials.status_code != 200:
             raise WebRequestError(credentials)
         return credentials.json()
