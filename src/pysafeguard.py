@@ -57,19 +57,18 @@ class PySafeguardConnection:
         self.req_globals = dict(verify=verify,cert=None)
         self.headers = CaseInsensitiveDict({'Accept':'application/json','Content-type':'application/json'})
 
-    def __execute_web_request(self, httpMethod, httpService, endpoint, query, body, headers, cert=None):
-        url = _assemble_url(self.host, _assemble_path(httpService, self.apiVersion if httpService != Services.RSTS else '', endpoint), query)
-        merged_headers = _merge_idict(self.headers, headers)
-        dojson = 'application/json' in merged_headers.get('content-type','').lower()
+    @staticmethod
+    def __execute_web_request(httpMethod, url, body, headers, verify, cert):
+        dojson = 'application/json' in headers.get('content-type','').lower()
         bodytype = dict(json=body) if dojson else dict(data=body)
-        with httpMethod(url, headers=merged_headers, **_merge_dict(self.req_globals, bodytype, cert=cert)) as req:
+        with httpMethod(url, headers=headers, cert=cert, verify=verify, **bodytype) as req:
             if req.status_code >= 200 and req.status_code < 300:
                 return req
             else:
                 raise WebRequestError(req)
 
     def get_provider_id(self, name):
-        req = self.__execute_web_request(HttpMethods.POST, Services.RSTS, 'UserLogin/LoginController', query=dict(redirect_uri='urn:InstalledApplication', loginRequestStep=1, response_type='token'), body='RelayState=', headers={'Content-type':'application/x-www-form-urlencoded'})
+        req = self.invoke_web_request(HttpMethods.POST, Services.RSTS, 'UserLogin/LoginController', query=dict(redirect_uri='urn:InstalledApplication', loginRequestStep=1, response_type='token'), body='RelayState=', additionalHeaders={'Content-type':'application/x-www-form-urlencoded'})
         response = req.json()
         providers = response.get('Providers',[])
         matches = list(filter(lambda x: name == x['DisplayName'], providers))
@@ -85,10 +84,10 @@ class PySafeguardConnection:
           'username': user_name,
           'password': password
         }
-        req = self.__execute_web_request(HttpMethods.POST,Services.RSTS,'oauth2/token',{},body,{})
+        req = self.invoke_web_request(HttpMethods.POST, Services.RSTS, 'oauth2/token', body=body)
         if req.status_code == 200 and 'application/json' in req.headers.get('Content-type',''):
             data = req.json()
-            req = self.__execute_web_request(HttpMethods.POST,Services.CORE,'Token/LoginResponse',{},dict(StsAccessToken=data.get('access_token')),{})
+            req = self.invoke_web_request(HttpMethods.POST, Services.CORE, 'Token/LoginResponse', body=dict(StsAccessToken=data.get('access_token')))
             if req.status_code == 200 and 'application/json' in req.headers.get('Content-type',''):
                 data = req.json()
                 self.UserToken = data.get('UserToken')
@@ -116,21 +115,17 @@ class PySafeguardConnection:
         else:
             raise WebRequestError(req)
 
-    def invoke(self, httpMethod, httpService, endpoint=None, query={}, body=None, additionalHeaders={}):
-        return self.__execute_web_request(httpMethod, httpService, endpoint, query, body, additionalHeaders)
+    def invoke_web_request(self, httpMethod, httpService, endpoint=None, query={}, body=None, additionalHeaders={}, host=None):
+        url = _assemble_url(host or self.host, _assemble_path(httpService, self.apiVersion if httpService != Services.RSTS else '', endpoint), query)
+        merged_headers = _merge_idict(self.headers, additionalHeaders)
+        return PySafeguardConnection.__execute_web_request(httpMethod, url, body, merged_headers, **self.req_globals)
 
-    def a2a_get_credential(self, apiKey, type, keyFormat, cert, key):
-        '''(Public) Retrieves an application to application credential.
-        * @param {string}              apiKey      (Required) The a2a api key.
-        * @param {string}              type        (Required) The type of credential to retrieve (password, privatekey, etc).
-        * @param {string}              keyFormat   (Optional) The privateKeyFormat to return (openssh, ssh2, putty, etc). Defaults to openssh.
-        * @param {string}              cert        (Required) The user certificate file location in pem format.
-        * @param {string}              key         (Required) The user certificate's key file location in key format.
-        '''
+    @staticmethod
+    def a2a_get_credential(host, apiKey, a2aType, keyFormat, cert, key, verify=True, apiVersion='v4'):
         if not apiKey:
             raise Exception("apiKey may not be null or empty")
 
-        if not type:
+        if not a2aType:
             raise Exception("type may not be null or empty")
         
         if not cert and not key:
@@ -140,13 +135,13 @@ class PySafeguardConnection:
             keyFormat = SshKeyFormats.OPENSSH
 
         header = {
-            'authorization': 'A2A {}'.format(apiKey)
+            'Authorization': 'A2A {}'.format(apiKey)
         }
         query = {
-            'type': type,
+            'type': a2aType,
             'keyFormat': keyFormat
         }
-        credentials = self.__execute_web_request(HttpMethods.GET, Services.A2A, endpoint="Credentials", query=query, body={}, headers=header, cert=(cert, key))
+        credentials = PySafeguardConnection.__execute_web_request(HttpMethods.GET, _assemble_url(host, _assemble_path(Services.A2A, apiVersion, "Credentials"), query), body={}, headers=header, verify=verify, cert=(cert, key))
         if credentials.status_code != 200:
             raise WebRequestError(credentials)
         return credentials.json()
