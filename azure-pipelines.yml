@@ -42,6 +42,7 @@ stages:
           echo AssemblySemVer: $(GitVersion.AssemblySemVer)
           echo FullSemVer: $(GitVersion.FullSemVer)
           echo InformationalVersion: $(GitVersion.InformationalVersion)
+          echo Build.SourceBranchName: $(build.SourceBranchName)
 
       - script: |
           python -m pip install --upgrade pip wheel
