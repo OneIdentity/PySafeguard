@@ -4,8 +4,7 @@ trigger:
     - main
   tags:
     include:
-    - 'v*'
-
+    - '*'
   paths:
     exclude:
       - README.md
@@ -26,34 +25,18 @@ stages:
         inputs:
           versionSpec: 3.7
 
-      - task: gitversion/setup@0
-        displayName: Setup GitVersion
-        inputs:
-          versionSpec: '5.x'
-          ignoreFailedSources: true
-          
-      - task: gitversion/execute@0
-        displayName: Determine Version
-
-      - script: |
-          echo BranchName: $(GitVersion.BranchName)
-          echo MajorMinorPatch: $(GitVersion.MajorMinorPatch)
-          echo SemVer: $(GitVersion.SemVer)
-          echo AssemblySemVer: $(GitVersion.AssemblySemVer)
-          echo FullSemVer: $(GitVersion.FullSemVer)
-          echo InformationalVersion: $(GitVersion.InformationalVersion)
-          echo Build.SourceBranchName: $(build.SourceBranchName)
-
       - script: |
           python -m pip install --upgrade pip wheel
           pip install poetry
           poetry install
         displayName: 'Install software'
 
-      - bash: echo Setting $(GitVersion.MajorMinorPatch) in pyproject.toml using poetry
+      - script: |
+           poetry version $(build.SourceBranchName)
+        displayName: Update pyproject.toml to $(build.SourceBranchName)
+        condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/')
 
       - script: |
-         poetry version $(GitVersion.MajorMinorPatch)
          poetry build
         displayName: Build PyPi dist
 
@@ -74,10 +57,10 @@ stages:
         condition: succeededOrFailed()
     
     # This stage will publish to PyPi if this build was 
-    # triggered by someone publishing a release with a GitHub tag starting with "v"
+    # triggered by someone publishing a release with a GitHub tag
   - stage: Release
     dependsOn: Build
-    condition: and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/v'))
+    condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
 
     jobs:
     - job: Publish_to_PyPi
