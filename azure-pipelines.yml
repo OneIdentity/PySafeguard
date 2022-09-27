@@ -2,10 +2,10 @@ trigger:
   branches:
     include:
     - main
+    - release/*
   tags:
     include:
-    - 'release-*'
-
+    - '*'
   paths:
     exclude:
       - README.md
@@ -26,36 +26,18 @@ stages:
         inputs:
           versionSpec: 3.7
 
-      - task: gitversion/setup@0
-        displayName: Setup GitVersion
-        inputs:
-          versionSpec: '5.x'
-          ignoreFailedSources: true
-          
-      - task: gitversion/execute@0
-        displayName: Determine Version
-        inputs:
-          useConfigFile: true
-          configFilePath: 'gitversion.yml'
-
-      - script: |
-          echo BranchName: $(GitVersion.BranchName)
-          echo MajorMinorPatch: $(GitVersion.MajorMinorPatch)
-          echo SemVer: $(GitVersion.SemVer)
-          echo AssemblySemVer: $(GitVersion.AssemblySemVer)
-          echo FullSemVer: $(GitVersion.FullSemVer)
-          echo InformationalVersion: $(GitVersion.InformationalVersion)
-
       - script: |
           python -m pip install --upgrade pip wheel
           pip install poetry
           poetry install
         displayName: 'Install software'
 
-      - bash: echo Setting $(GitVersion.MajorMinorPatch) in pyproject.toml using poetry
+      - script: |
+           poetry version $(build.SourceBranchName)
+        displayName: Update pyproject.toml to $(build.SourceBranchName)
+        condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/')
 
       - script: |
-         poetry version $(GitVersion.MajorMinorPatch)
          poetry build
         displayName: Build PyPi dist
 
@@ -76,17 +58,17 @@ stages:
         condition: succeededOrFailed()
     
     # This stage will publish to PyPi if this build was 
-    # triggered by someone adding a GitHug tag starting with "release-"
+    # triggered by someone publishing a release with a GitHub tag
   - stage: Release
     dependsOn: Build
-    condition: and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/release-'))
+    condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
 
     jobs:
     - job: Publish_to_PyPi
       steps:
       - download: 'current'
         artifact: 'drop'
-        displayName: 'Download artifacts for release build due to tag release-'
+        displayName: 'Download artifacts for release build due to tag'
      
       - script: |
           python -m pip install --upgrade pip
@@ -101,5 +83,5 @@ stages:
           pythonUploadServiceConnection: pypiOneIdentity
     
       - script: |
-          twine upload --verbose --config-file $(PYPIRC_PATH) $(Pipeline.Workspace)/drop/*
+          twine upload --verbose --config-file $(PYPIRC_PATH) $(Pipeline.Workspace)/drop/dist/*
         displayName: Upload release to PyPi OneIdentity
