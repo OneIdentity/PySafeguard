@@ -16,10 +16,12 @@ stages:
       - task: UsePythonVersion@0
         inputs:
           versionSpec: 3.7
+
       - task: gitversion/setup@0
-        displayName: Install GitVersion
+        displayName: Setup GitVersion
         inputs:
-          versionSpec: '5.5.0'
+          versionSpec: '5.x'
+          ignoreFailedSources: true
           
       - task: gitversion/execute@0
         displayName: Determine Version
