@@ -47,7 +47,7 @@ class PySafeguardConnection:
         self.host = host
         self.UserToken = None
         self.apiVersion = 'v4'
-        self.req_globals = dict(verify=verify)
+        self.req_globals = dict(verify=verify,cert=None)
         self.headers = CaseInsensitiveDict({'Accept':'application/json','Content-type':'application/json'})
 
     def __execute_web_request(self, httpMethod, httpService, endpoint, query, body, headers):
