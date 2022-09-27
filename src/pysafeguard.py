@@ -26,6 +26,12 @@ class SshKeyFormats(Enum):
     SSH2 = 2
     PUTTY = 3
 
+class WebRequestError(Exception):
+    def __init__(self, req):
+        self.req = req
+        self.message = '{} {}: {} {}\n{}'.format(req.status_code,req.reason,req.request.method,req.url,req.text)
+        super().__init__(self.message)
+
 def _assemble_path(*args):
     return '/'.join(map(lambda x: str(x).strip('/'), args))
 
@@ -56,7 +62,7 @@ class PySafeguardConnection:
             if req.status_code >= 200 and req.status_code < 300:
                 return req
             else:
-                raise Exception('{} {}: {} {}\n{}'.format(req.status_code,req.reason,req.request.method,req.url,req.text))
+                raise WebRequestError(req)
 
     def connect_password(self, user_name, password, provider='local'):
         body = {
@@ -74,9 +80,9 @@ class PySafeguardConnection:
                 self.UserToken = data.get('UserToken')
                 self.headers.update(Authorization='Bearer {}'.format(self.UserToken))
             else:
-                raise Exception('{} {}: {} {}\n{}'.format(req.status_code,req.reason,req.request.method,req.url,req.text))
+                raise WebRequestError(req)
         else:
-            raise Exception('{} {}: {} {}\n{}'.format(req.status_code,req.reason,req.request.method,req.url,req.text))
+            raise WebRequestError(req)
 
     def connect_certificate(self, cert_file, key_file, pfx_file, passphrase, provider='certificate'):
         # TODO: rSTS logic integration to get an access token
