@@ -4,7 +4,7 @@ trigger:
     - main
   tags:
     include:
-    - 'release-*'
+    - 'v*'
 
   paths:
     exclude:
@@ -76,17 +76,17 @@ stages:
         condition: succeededOrFailed()
     
     # This stage will publish to PyPi if this build was 
-    # triggered by someone adding a GitHug tag starting with "release-"
+    # triggered by someone publishing a release with a GitHub tag starting with "v"
   - stage: Release
     dependsOn: Build
-    condition: and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/release-'))
+    condition: and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/v'))
 
     jobs:
     - job: Publish_to_PyPi
       steps:
       - download: 'current'
         artifact: 'drop'
-        displayName: 'Download artifacts for release build due to tag release-'
+        displayName: 'Download artifacts for release build due to tag'
      
       - script: |
           python -m pip install --upgrade pip
@@ -101,5 +101,5 @@ stages:
           pythonUploadServiceConnection: pypiOneIdentity
     
       - script: |
-          twine upload --verbose --config-file $(PYPIRC_PATH) $(Pipeline.Workspace)/drop/*
+          twine upload --verbose --config-file $(PYPIRC_PATH) $(Pipeline.Workspace)/drop/dist/*
         displayName: Upload release to PyPi OneIdentity
