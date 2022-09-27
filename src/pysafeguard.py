@@ -141,7 +141,7 @@ class PySafeguardConnection:
             'type': a2aType,
             'keyFormat': keyFormat
         }
-        credentials = PySafeguardConnection.__execute_web_request(HttpMethods.GET, _assemble_url(host, _assemble_path(Services.A2A, endpoint="Credentials"), query), body={}, headers=header, verify=verify, cert=(cert, key))
+        credentials = PySafeguardConnection.__execute_web_request(HttpMethods.GET, _assemble_url(host, _assemble_path(Services.A2A, "Credentials"), query), body={}, headers=header, verify=verify, cert=(cert, key))
         if credentials.status_code != 200:
             raise WebRequestError(credentials)
         return credentials.json()
