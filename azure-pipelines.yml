@@ -52,12 +52,10 @@ stages:
           poetry install
         displayName: 'Install software'
 
-      - bash: echo Setting local buildversion in pyproject.toml using poetry
-      - bash: echo '##vso[task.setvariable variable=buildversion]$(GitVersion.MajorMinorPatch)
-      - bash: echo $(buildversion)
+      - bash: echo Setting $(GitVersion.MajorMinorPatch) in pyproject.toml using poetry
 
       - script: |
-         poetry version $(buildversion)
+         poetry version $(GitVersion.MajorMinorPatch)
          poetry build
         displayName: Build PyPi dist
 
