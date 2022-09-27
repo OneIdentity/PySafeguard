@@ -1,5 +1,14 @@
 trigger:
-- main
+  branches:
+    include:
+    - main
+  tags:
+    include:
+    - 'v*'
+
+  paths:
+    exclude:
+      - README.md
 
 pool:
   vmImage: ubuntu-latest
@@ -16,10 +25,12 @@ stages:
       - task: UsePythonVersion@0
         inputs:
           versionSpec: 3.7
+
       - task: gitversion/setup@0
-        displayName: Install GitVersion
+        displayName: Setup GitVersion
         inputs:
-          versionSpec: '5.5.0'
+          versionSpec: '5.x'
+          ignoreFailedSources: true
           
       - task: gitversion/execute@0
         displayName: Determine Version
@@ -32,23 +43,18 @@ stages:
           echo FullSemVer: $(GitVersion.FullSemVer)
           echo InformationalVersion: $(GitVersion.InformationalVersion)
 
-      - script: echo %Action%%BuildVersion%
-        displayName: 'Set build version to $(GitVersion.MajorMinorPatch)'
-        env:
-          Action: '##vso[build.updatebuildnumber]'
-          BuildVersion: $(GitVersion.MajorMinorPatch)
-
       - script: |
           python -m pip install --upgrade pip wheel
           pip install poetry
           poetry install
         displayName: 'Install software'
 
-      - bash: echo Setting $(BuildVersion) in pyproject.toml using poetry
+      - bash: echo Setting $(GitVersion.MajorMinorPatch) in pyproject.toml using poetry
+
       - script: |
-         poetry version $(BuildVersion)
+         poetry version $(GitVersion.MajorMinorPatch)
          poetry build
-        displayName: Build PyPi dist $(BuildVersion)
+        displayName: Build PyPi dist
 
       - task: CopyFiles@2
         displayName: 'Copy dist to artifact staging directory'
@@ -66,27 +72,31 @@ stages:
           targetPath: '$(Build.ArtifactStagingDirectory)'
         condition: succeededOrFailed()
     
+    # This stage will publish to PyPi if this build was 
+    # triggered by someone publishing a release with a GitHub tag starting with "v"
   - stage: Release
     dependsOn: Build
-    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'), startswith(variables['Build.SourceBranch'], 'refs/heads/release'))
+    condition: and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/v'))
 
     jobs:
     - job: Publish_to_PyPi
       steps:
       - download: 'current'
         artifact: 'drop'
-        displayName: 'Download artifacts'
+        displayName: 'Download artifacts for release build due to tag'
      
       - script: |
           python -m pip install --upgrade pip
           pip install twine
         displayName: 'Install twine'
 
+      # Set pythonUploadServiceConnection: testPypiTania if you want to test a PyPi push
+      # but not actually push a project to PyPi OneIdentity. See Project Settings->Service Connections.
       - task: TwineAuthenticate@1
         displayName: Twine Authenticate
         inputs:
-          pythonUploadServiceConnection: testPypiTania
+          pythonUploadServiceConnection: pypiOneIdentity
     
       - script: |
-          twine upload -r testpypi --verbose --config-file $(PYPIRC_PATH) dist/*
-        displayName: Upload package to testpypi
+          twine upload --verbose --config-file $(PYPIRC_PATH) $(Pipeline.Workspace)/drop/dist/*
+        displayName: Upload release to PyPi OneIdentity

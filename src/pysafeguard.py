@@ -1,4 +1,5 @@
 import requests
+import json
 from requests.structures import CaseInsensitiveDict
 from urllib.parse import urlunparse,urlencode
 from enum import Enum
@@ -26,8 +27,14 @@ class SshKeyFormats:
     SSH2 = "ssh2"
     PUTTY = "putty"
 
+class WebRequestError(Exception):
+    def __init__(self, req):
+        self.req = req
+        self.message = '{} {}: {} {}\n{}'.format(req.status_code,req.reason,req.request.method,req.url,req.text)
+        super().__init__(self.message)
+
 def _assemble_path(*args):
-    return '/'.join(map(lambda x: str(x).strip('/'), args))
+    return '/'.join(map(lambda x: str(x).strip('/'), filter(None, args)))
 
 def _assemble_url(netloc='',path='',query={},fragment='',scheme='https'):
     return urlunparse((scheme,netloc,path,'',urlencode(query,True),fragment))
@@ -52,11 +59,24 @@ class PySafeguardConnection:
 
     def __execute_web_request(self, httpMethod, httpService, endpoint, query, body, headers):
         url = _assemble_url(self.host, _assemble_path(httpService, self.apiVersion if httpService != Services.RSTS else '', endpoint), query)
-        with httpMethod(url, json=body, headers=_merge_idict(self.headers, headers), **self.req_globals) as req:
+        merged_headers = _merge_idict(self.headers, headers)
+        dojson = 'application/json' in merged_headers.get('content-type','').lower()
+        bodytype = dict(json=body) if dojson else dict(data=body)
+        with httpMethod(url, headers=merged_headers, **_merge_dict(self.req_globals, bodytype)) as req:
             if req.status_code >= 200 and req.status_code < 300:
                 return req
             else:
-                raise Exception('{} {}: {} {}\n{}'.format(req.status_code,req.reason,req.request.method,req.url,req.text))
+                raise WebRequestError(req)
+
+    def get_provider_id(self, name):
+        req = self.__execute_web_request(HttpMethods.POST, Services.RSTS, 'UserLogin/LoginController', query=dict(redirect_uri='urn:InstalledApplication', loginRequestStep=1, response_type='token'), body='RelayState=', headers={'Content-type':'application/x-www-form-urlencoded'})
+        response = req.json()
+        providers = response.get('Providers',[])
+        matches = list(filter(lambda x: name == x['DisplayName'], providers))
+        if matches:
+            return matches[0]['Id']
+        else:
+            raise Exception('Unable to find Provider with DisplayName {} in\n{}'.format(name,json.dumps(providers,indent=2,sort_keys=True)))
 
     def connect_password(self, user_name, password, provider='local'):
         body = {
@@ -74,9 +94,9 @@ class PySafeguardConnection:
                 self.UserToken = data.get('UserToken')
                 self.headers.update(Authorization='Bearer {}'.format(self.UserToken))
             else:
-                raise Exception('{} {}: {} {}\n{}'.format(req.status_code,req.reason,req.request.method,req.url,req.text))
+                raise WebRequestError(req)
         else:
-            raise Exception('{} {}: {} {}\n{}'.format(req.status_code,req.reason,req.request.method,req.url,req.text))
+            raise WebRequestError(req)
 
     def connect_certificate(self, provider='certificate'):
         body = {
