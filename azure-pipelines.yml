@@ -16,7 +16,22 @@ stages:
       - task: UsePythonVersion@0
         inputs:
           versionSpec: 3.7
-    
+      - task: gitversion/setup@0
+        displayName: Install GitVersion
+        inputs:
+          versionSpec: '5.5.0'
+          
+      - task: gitversion/execute@0
+        displayName: Determine Version
+
+      - script: |
+          echo BranchName: $(GitVersion.BranchName)
+          echo MajorMinorPatch: $(GitVersion.MajorMinorPatch)
+          echo SemVer: $(GitVersion.SemVer)
+          echo AssemblySemVer: $(GitVersion.AssemblySemVer)
+          echo FullSemVer: $(GitVersion.FullSemVer)
+          echo InformationalVersion: $(GitVersion.InformationalVersion)
+
       - script: echo %Action%%BuildVersion%
         displayName: 'Set build version to $(GitVersion.MajorMinorPatch)'
         env:
