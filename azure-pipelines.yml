@@ -34,6 +34,9 @@ stages:
           
       - task: gitversion/execute@0
         displayName: Determine Version
+        inputs:
+          useConfigFile: true
+          configFilePath: 'gitversion.yml'
 
       - script: |
           echo BranchName: $(GitVersion.BranchName)
@@ -78,7 +81,7 @@ stages:
     # triggered by someone adding a GitHug tag starting with "release-"
   - stage: Release
     dependsOn: Build
-    condition: succeeded() and contains(variables['Build.SourceBranch'], 'refs/tags/release-')
+    condition: and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/release-'))
 
     jobs:
     - job: Publish_to_PyPi
