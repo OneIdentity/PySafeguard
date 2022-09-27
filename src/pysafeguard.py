@@ -121,7 +121,7 @@ class PySafeguardConnection:
         return PySafeguardConnection.__execute_web_request(httpMethod, url, body, merged_headers, **self.req_globals)
 
     @staticmethod
-    def a2a_get_credential(host, apiKey, a2aType, keyFormat, verify, cert, key):
+    def a2a_get_credential(host, apiKey, a2aType, keyFormat, cert, key, verify=True):
         if not apiKey:
             raise Exception("apiKey may not be null or empty")
 
