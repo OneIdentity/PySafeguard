@@ -101,5 +101,5 @@ stages:
           pythonUploadServiceConnection: pypiOneIdentity
     
       - script: |
-          twine upload --verbose --config-file $(PYPIRC_PATH) dist/*
+          twine upload --verbose --config-file $(PYPIRC_PATH) $(Pipeline.Workspace)/drop/*
         displayName: Upload release to PyPi OneIdentity
