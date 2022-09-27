@@ -57,19 +57,18 @@ class PySafeguardConnection:
         self.req_globals = dict(verify=verify,cert=None)
         self.headers = CaseInsensitiveDict({'Accept':'application/json','Content-type':'application/json'})
 
-    def __execute_web_request(self, httpMethod, httpService, endpoint, query, body, headers):
-        url = _assemble_url(self.host, _assemble_path(httpService, self.apiVersion if httpService != Services.RSTS else '', endpoint), query)
-        merged_headers = _merge_idict(self.headers, headers)
-        dojson = 'application/json' in merged_headers.get('content-type','').lower()
+    @staticmethod
+    def __execute_web_request(httpMethod, url, body, headers, verify, cert):
+        dojson = 'application/json' in headers.get('content-type','').lower()
         bodytype = dict(json=body) if dojson else dict(data=body)
-        with httpMethod(url, headers=merged_headers, **_merge_dict(self.req_globals, bodytype)) as req:
+        with httpMethod(url, headers=headers, cert=cert, verify=verify, **bodytype) as req:
             if req.status_code >= 200 and req.status_code < 300:
                 return req
             else:
                 raise WebRequestError(req)
 
     def get_provider_id(self, name):
-        req = self.__execute_web_request(HttpMethods.POST, Services.RSTS, 'UserLogin/LoginController', query=dict(redirect_uri='urn:InstalledApplication', loginRequestStep=1, response_type='token'), body='RelayState=', headers={'Content-type':'application/x-www-form-urlencoded'})
+        req = self.invoke_web_request(HttpMethods.POST, Services.RSTS, 'UserLogin/LoginController', query=dict(redirect_uri='urn:InstalledApplication', loginRequestStep=1, response_type='token'), body='RelayState=', additionalHeaders={'Content-type':'application/x-www-form-urlencoded'})
         response = req.json()
         providers = response.get('Providers',[])
         matches = list(filter(lambda x: name == x['DisplayName'], providers))
@@ -85,10 +84,10 @@ class PySafeguardConnection:
           'username': user_name,
           'password': password
         }
-        req = self.__execute_web_request(HttpMethods.POST,Services.RSTS,'oauth2/token',{},body,{})
+        req = self.invoke_web_request(HttpMethods.POST, Services.RSTS, 'oauth2/token', body=body)
         if req.status_code == 200 and 'application/json' in req.headers.get('Content-type',''):
             data = req.json()
-            req = self.__execute_web_request(HttpMethods.POST,Services.CORE,'Token/LoginResponse',{},dict(StsAccessToken=data.get('access_token')),{})
+            req = self.invoke_web_request(HttpMethods.POST, Services.CORE, 'Token/LoginResponse', body=dict(StsAccessToken=data.get('access_token')))
             if req.status_code == 200 and 'application/json' in req.headers.get('Content-type',''):
                 data = req.json()
                 self.UserToken = data.get('UserToken')
@@ -102,8 +101,10 @@ class PySafeguardConnection:
         # TODO: rSTS logic integration to get an access token
         self.access_token = None
 
-    def invoke(self, httpMethod, httpService, endpoint=None, query={}, body=None, additionalHeaders={}):
-        return self.__execute_web_request(httpMethod, httpService, endpoint, query, body, additionalHeaders)
+    def invoke_web_request(self, httpMethod, httpService, endpoint=None, query={}, body=None, additionalHeaders={}, host=None):
+        url = _assemble_url(host or self.host, _assemble_path(httpService, self.apiVersion if httpService != Services.RSTS else '', endpoint), query)
+        merged_headers = _merge_idict(self.headers, additionalHeaders)
+        return PySafeguardConnection.__execute_web_request(httpMethod, url, body, merged_headers, **self.req_globals)
 
     def a2a_get_credential(self, apiKey, type, keyFormat, cert, key, passphrase):
         #TODO: get the a2a credential
