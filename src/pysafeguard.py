@@ -126,7 +126,7 @@ class PySafeguardConnection:
             raise Exception("cert path and key path may not be null or empty")
 
         header = {
-            'Authorization': 'A2A {}'.format(apiKey)
+            'Authorization': f'A2A {apiKey}'
         }
         query = _merge_dict(dict(type=a2aType), dict(keyFormat=keyFormat) if a2aType == A2ATypes.PRIVATEKEY else {})
         credential = PySafeguardConnection.__execute_web_request(HttpMethods.GET, _assemble_url(host, _assemble_path(Services.A2A, apiVersion, "Credentials"), query), body={}, headers=header, verify=verify, cert=(cert, key))

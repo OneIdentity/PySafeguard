@@ -23,7 +23,7 @@ PySafeguard is provided to facilitate calling the Safeguard API from Python.
 It is meant to remove the complexity of dealing with authentication via
 Safeguard's embedded secure token service (STS). The basic usage is to call
 `connect()` to establish a connection to Safeguard, then you can call
-`invoke()` multiple times using the same authenticated connection.
+`invoke_web_request()` multiple times using the same authenticated connection.
 
 PySafeguard also provides an easy way to call Safeguard A2A from Python. The A2A service requires client certificate authentication for retrieving passwords for application integration. When Safeguard A2A is properly configured, specified passwords can be retrieved with a single method call without requiring access request workflow approvals. Safeguard A2A is protected by API keys and IP restrictions in addition to client certificate authentication.
 
@@ -42,33 +42,28 @@ This Python module is published to the [PyPi registry](https://pypi.org/manage/p
 A simple code example for calling the Safeguard API with username and password authentication through the local Safeguard STS:
 
 ```Python
-#TODO: Update for latest code
 from pysafeguard import *
 
-conn = PySafeguardConnection('safeguard.sample.corp')
-conn.connect_password('Admin','Admin123')
-req = conn.invoke(HttpMethods.GET,Services.CORE,'Me')
+connection = PySafeguardConnection('safeguard.sample.corp', 'ssl/pathtoca.pem')
+connection.connect_password('Admin','Admin123')
 ```
 
 Password authentication to an external provider is as follows:
 
 ```Python
-#TODO: Update for latest code
 from pysafeguard import *
 
-conn = PySafeguardConnection('safeguard.sample.corp')
-conn.connect_password('Admin','Admin123', 'myexternalprovider')
-req = conn.invoke(HttpMethods.GET,Services.CORE,'Me')
+connection = PySafeguardConnection('safeguard.sample.corp', 'ssl/pathtoca.pem')
+connection.connect_password('Admin','Admin123', 'myexternalprovider')
 ```
 
 Client certificate authentication is also available. This can be done either using a PFX certificate file or a PEM and KEY.
 
 ```Python
-#TODO: Update for latest code
 from pysafeguard import *
 
-conn = PySafeguardConnection('safeguard.sample.corp', 'ssl/ca.pem')
-conn.connect_certificate('ssl/certificateuser.pem', 'ssl/certificateuser.key)
+connection = PySafeguardConnection('safeguard.sample.corp', 'ssl/ca.pem')
+connection.connect_certificate('ssl/pathtocertuser.pem', 'ssl/pathtocertuser.key')
 ```
 
 ```Python
@@ -103,10 +98,9 @@ conn.connect_certificate(None, None, 'ssl/certificateuser.pfx', 'myexternalprovi
 A connection can also be made anonymously 
 
 ```Python
-#TODO: Update for latest code
 from pysafeguard import *
 
-conn = PySafeguardConnection('safeguard.sample.corp')
+conn = PySafeguardConnection('safeguard.sample.corp', False)
 ```
 
 Authentication is also possible using an existing Safeguard API token:
@@ -131,16 +125,15 @@ To retrieve a password via A2A:
 ```Python
 from pysafeguard import *
 
-PySafeguardConnection.a2a_get_credential('applianceaddress', 'myapikey', 'ssl/certificateuser.pem', 'ssl/certificateuser.key', 'ssl/ca.pem')
+password = PySafeguardConnection.a2a_get_credential('applianceaddress', 'myapikey', 'ssl/certificateuser.pem', 'ssl/certificateuser.key', 'ssl/ca.pem')
 ```
 
 To retrieve a private key in OpenSSH format via A2A:
 
 ```Python
-#TODO: Update for latest code
 from pysafeguard import *
 
-PySafeguardConnection.a2a_get_credential('applianceaddress', 'myapikey', 'ssl/certificateuser.pem', 'ssl/certificateuser.key', 'ssl/ca.pem', A2ATypes.PRIVATEKEY)
+privatekey = PySafeguardConnection.a2a_get_credential('applianceaddress', 'myapikey', 'ssl/certificateuser.pem', 'ssl/certificateuser.key', 'ssl/ca.pem', A2ATypes.PRIVATEKEY)
 ```
 
 ## About the Safeguard API
@@ -183,6 +176,9 @@ Sample can be found <a href="samples\AnonymousExample">here</a>.
 ```Python
 #TODO: give example targeting
 # PySafeguard.Services.NOTIFICATION, PySafeguard.HttpMethods.GET, 'v3/Status'
+connection = PySafeguardConnection(hostName, False)
+result = connection.invoke(HttpMethods.GET, Services.NOTIFICATION, 'Status')
+print(json.dumps(result.json(),indent=2,sort_keys=True))
 ```
 
 #### Get remaining access token lifetime
