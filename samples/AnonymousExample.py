@@ -1,6 +1,7 @@
 from pysafeguard import *
 import json
 
+# The appliance host name or IP address
 hostName = ""
 
 print('Connecting anonymously')

@@ -63,7 +63,7 @@ Client certificate authentication is also available. This can be done either usi
 from pysafeguard import *
 
 connection = PySafeguardConnection('safeguard.sample.corp', 'ssl/ca.pem')
-connection.connect_certificate('ssl/pathtocertuser.pem', 'ssl/pathtocertuser.key)
+connection.connect_certificate('ssl/pathtocertuser.pem', 'ssl/pathtocertuser.key')
 ```
 
 ```Python
