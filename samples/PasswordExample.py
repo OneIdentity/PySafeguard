@@ -1,9 +1,16 @@
 from pysafeguard import *
 
-hostName = ""
-userName = ""
-password = ""
-pathToCAFile = ""
+# The appliance host name or IP address
+hostName = ''
+
+# The user name for password authentication
+userName = ''
+
+# The password for passowrd authentication
+password = ''
+
+# Path to the trusted root ca of the appliance
+pathToCAFile = ''
 
 print('Connecting to Safeguard')
 connection = PySafeguardConnection(hostName, pathToCAFile)
