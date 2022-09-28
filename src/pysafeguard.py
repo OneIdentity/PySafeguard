@@ -55,20 +55,22 @@ class PySafeguardConnection:
         self.UserToken = None
         self.apiVersion = 'v4'
         self.req_globals = dict(verify=verify,cert=None)
-        self.headers = CaseInsensitiveDict({'Accept':'application/json','Content-type':'application/json'})
+        self.headers = CaseInsensitiveDict({'Accept':'application/json'})
 
     @staticmethod
     def __execute_web_request(httpMethod, url, body, headers, verify, cert):
-        dojson = 'application/json' in headers.get('content-type','').lower()
-        bodytype = dict(json=body) if dojson else dict(data=body)
-        with httpMethod(url, headers=headers, cert=cert, verify=verify, **bodytype) as req:
+        bodystyle = dict(data=body)
+        if body and httpMethod in [HttpMethods.POST, HttpMethods.PUT] and not headers.get('content-type'):
+            bodystyle = dict(json=body)
+            headers = _merge_idict(headers, {'Content-type':'application/json'})
+        with httpMethod(url, headers=headers, cert=cert, verify=verify, **bodystyle) as req:
             if req.status_code >= 200 and req.status_code < 300:
                 return req
             else:
                 raise WebRequestError(req)
 
     def get_provider_id(self, name):
-        req = self.invoke_web_request(HttpMethods.POST, Services.RSTS, 'UserLogin/LoginController', query=dict(redirect_uri='urn:InstalledApplication', loginRequestStep=1, response_type='token'), body='RelayState=', additionalHeaders={'Content-type':'application/x-www-form-urlencoded'})
+        req = self.invoke(HttpMethods.POST, Services.RSTS, 'UserLogin/LoginController', query=dict(redirect_uri='urn:InstalledApplication', loginRequestStep=1, response_type='token'), body='RelayState=', additionalHeaders={'Content-type':'application/x-www-form-urlencoded'})
         response = req.json()
         providers = response.get('Providers',[])
         matches = list(filter(lambda x: name == x['DisplayName'], providers))
@@ -77,6 +79,19 @@ class PySafeguardConnection:
         else:
             raise Exception('Unable to find Provider with DisplayName {} in\n{}'.format(name,json.dumps(providers,indent=2,sort_keys=True)))
 
+    def connect(self, body, *args, **kwargs):
+        req = self.invoke(HttpMethods.POST, Services.RSTS, 'oauth2/token', body=body, *args, **kwargs)
+        if req.status_code == 200 and 'application/json' in req.headers.get('Content-type',''):
+            data = req.json()
+            req = self.invoke(HttpMethods.POST, Services.CORE, 'Token/LoginResponse', body=dict(StsAccessToken=data.get('access_token')))
+            if req.status_code == 200 and 'application/json' in req.headers.get('Content-type',''):
+                data = req.json()
+                self.connect_token(data.get('UserToken'))
+            else:
+                raise WebRequestError(req)
+        else:
+            raise WebRequestError(req)
+
     def connect_password(self, user_name, password, provider='local'):
         body = {
           'scope': 'rsts:sts:primaryproviderid:{}'.format(provider),
@@ -84,41 +99,23 @@ class PySafeguardConnection:
           'username': user_name,
           'password': password
         }
-        req = self.invoke_web_request(HttpMethods.POST, Services.RSTS, 'oauth2/token', body=body)
-        if req.status_code == 200 and 'application/json' in req.headers.get('Content-type',''):
-            data = req.json()
-            req = self.invoke_web_request(HttpMethods.POST, Services.CORE, 'Token/LoginResponse', body=dict(StsAccessToken=data.get('access_token')))
-            if req.status_code == 200 and 'application/json' in req.headers.get('Content-type',''):
-                data = req.json()
-                self.UserToken = data.get('UserToken')
-                self.headers.update(Authorization='Bearer {}'.format(self.UserToken))
-            else:
-                raise WebRequestError(req)
-        else:
-            raise WebRequestError(req)
+        return self.connect(body)
 
-    def connect_certificate(self, provider='certificate'):
+    def connect_certificate(self, certFile, keyFile, provider='certificate'):
         body = {
           'scope': 'rsts:sts:primaryproviderid:{}'.format(provider),
           'grant_type': 'client_credentials'
         }
-        req = self.__execute_web_request(HttpMethods.POST,Services.RSTS,'oauth2/token',{},body,{})
-        if req.status_code == 200 and 'application/json' in req.headers.get('Content-type',''):
-            data = req.json()
-            req = self.__execute_web_request(HttpMethods.POST,Services.CORE,'Token/LoginResponse',{},dict(StsAccessToken=data.get('access_token')),{})
-            if req.status_code == 200 and 'application/json' in req.headers.get('Content-type',''):
-                data = req.json()
-                self.UserToken = data.get('UserToken')
-                self.headers.update(Authorization='Bearer {}'.format(self.UserToken))
-            else:
-                raise WebRequestError(req)
-        else:
-            raise WebRequestError(req)
+        return self.connect(body,cert=(certFile,keyFile))
 
-    def invoke_web_request(self, httpMethod, httpService, endpoint=None, query={}, body=None, additionalHeaders={}, host=None):
+    def connect_token(self, token):
+        self.UserToken = token
+        self.headers.update(Authorization='Bearer {}'.format(self.UserToken))
+
+    def invoke(self, httpMethod, httpService, endpoint=None, query={}, body=None, additionalHeaders={}, host=None, cert=None):
         url = _assemble_url(host or self.host, _assemble_path(httpService, self.apiVersion if httpService != Services.RSTS else '', endpoint), query)
         merged_headers = _merge_idict(self.headers, additionalHeaders)
-        return PySafeguardConnection.__execute_web_request(httpMethod, url, body, merged_headers, **self.req_globals)
+        return PySafeguardConnection.__execute_web_request(httpMethod, url, body, merged_headers, **_merge_dict(self.req_globals, cert=cert))
 
     @staticmethod
     def a2a_get_credential(host, apiKey, a2aType, keyFormat, cert, key, verify=True, apiVersion='v4'):
