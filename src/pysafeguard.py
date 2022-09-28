@@ -143,6 +143,10 @@ class PySafeguardConnection:
             raise WebRequestError(credentials)
         return credentials.json()
 
+    def get_token_lifetime_remaining(self):
+        req = self.invoke(HttpMethods.GET, Services.APPLIANCE, 'SystemTime')
+        return req.headers.get('X-tokenlifetimeremaining')
+
     def register_signalr(self, callback):
         #TODO: register the signalr callback
         #This will require a python module with targeting https://${hostName}/service/event/signalr
