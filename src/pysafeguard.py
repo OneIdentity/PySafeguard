@@ -134,7 +134,7 @@ class PySafeguardConnection:
             raise WebRequestError(credential)
         return credential.json()
 
-    def get_token_lifetime_remaining(self):
+    def get_remaining_token_lifetime(self):
         req = self.invoke(HttpMethods.GET, Services.APPLIANCE, 'SystemTime')
         return req.headers.get('X-tokenlifetimeremaining')
 
