@@ -129,21 +129,18 @@ Once you have configured your A2A registration in Safeguard you can retrieve an 
 To retrieve a password via A2A:
 
 ```Python
-#TODO: Update for latest code
 from pysafeguard import *
 
-conn = PySafeguardConnection('safeguard.sample.corp', 'ssl/ca.pem')
-conn.a2a_get_credential_from_files('myapikey', PySafeguard.A2ATypes.PASSWORD, None, 'ssl/certificateuser.pem', 'ssl/certificateuser.key')
+PySafeguardConnection.a2a_get_credential('applianceaddress', 'myapikey', 'ssl/certificateuser.pem', 'ssl/certificateuser.key', 'ssl/ca.pem')
 ```
 
-To retrieve a private key via A2A:
+To retrieve a private key in OpenSSH format via A2A:
 
 ```Python
 #TODO: Update for latest code
 from pysafeguard import *
 
-conn = PySafeguardConnection('safeguard.sample.corp', 'ssl/ca.pem')
-conn.a2a_get_credential_from_files('myapikey', PySafeguard.A2ATypes.PASSWORD, PySafeguard.SshKeyFormats.OPENSSH, 'ssl/certificateuser.pem', 'ssl/certificateuser.key')
+PySafeguardConnection.a2a_get_credential('applianceaddress', 'myapikey', 'ssl/certificateuser.pem', 'ssl/certificateuser.key', 'ssl/ca.pem', A2ATypes.PRIVATEKEY)
 ```
 
 ## About the Safeguard API
