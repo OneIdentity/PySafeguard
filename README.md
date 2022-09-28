@@ -23,7 +23,7 @@ PySafeguard is provided to facilitate calling the Safeguard API from Python.
 It is meant to remove the complexity of dealing with authentication via
 Safeguard's embedded secure token service (STS). The basic usage is to call
 `connect()` to establish a connection to Safeguard, then you can call
-`invoke()` multiple times using the same authenticated connection.
+`invoke_web_request()` multiple times using the same authenticated connection.
 
 PySafeguard also provides an easy way to call Safeguard A2A from Python. The A2A service requires client certificate authentication for retrieving passwords for application integration. When Safeguard A2A is properly configured, specified passwords can be retrieved with a single method call without requiring access request workflow approvals. Safeguard A2A is protected by API keys and IP restrictions in addition to client certificate authentication.
 
@@ -42,10 +42,9 @@ This Python module is published to the [PyPi registry](https://pypi.org/manage/p
 A simple code example for calling the Safeguard API with username and password authentication through the local Safeguard STS:
 
 ```Python
-#TODO: Update for latest code
 from pysafeguard import *
 
-conn = PySafeguardConnection('safeguard.sample.corp')
+conn = PySafeguardConnection('safeguard.sample.corp', 'ssl/pathtocertuser.pem')
 conn.connect_password('Admin','Admin123')
 req = conn.invoke(HttpMethods.GET,Services.CORE,'Me')
 ```
@@ -56,7 +55,7 @@ Password authentication to an external provider is as follows:
 #TODO: Update for latest code
 from pysafeguard import *
 
-conn = PySafeguardConnection('safeguard.sample.corp')
+conn = PySafeguardConnection('safeguard.sample.corp', 'ssl/pathtocertuser.pem')
 conn.connect_password('Admin','Admin123', 'myexternalprovider')
 req = conn.invoke(HttpMethods.GET,Services.CORE,'Me')
 ```
@@ -103,10 +102,9 @@ conn.connect_certificate(None, None, 'ssl/certificateuser.pfx', 'myexternalprovi
 A connection can also be made anonymously 
 
 ```Python
-#TODO: Update for latest code
 from pysafeguard import *
 
-conn = PySafeguardConnection('safeguard.sample.corp')
+conn = PySafeguardConnection('safeguard.sample.corp', False)
 ```
 
 Authentication is also possible using an existing Safeguard API token:
@@ -128,22 +126,19 @@ Once you have configured your A2A registration in Safeguard you can retrieve an 
 
 To retrieve a password via A2A:
 
-```Python
-#TODO: Update for latest code
+```Python 
 from pysafeguard import *
 
-conn = PySafeguardConnection('safeguard.sample.corp', 'ssl/ca.pem')
-conn.a2a_get_credential_from_files('myapikey', PySafeguard.A2ATypes.PASSWORD, None, 'ssl/certificateuser.pem', 'ssl/certificateuser.key')
+password = PySafeguardConnection.a2a_get_credential('myhost', 'myapikey', A2ATypes.PASSWORD, None, 'ssl/pathtocertuser.crt, ssl/pathtocertuser.key, ssl/pathtocertuser.pem)
+
 ```
 
 To retrieve a private key via A2A:
 
 ```Python
-#TODO: Update for latest code
 from pysafeguard import *
 
-conn = PySafeguardConnection('safeguard.sample.corp', 'ssl/ca.pem')
-conn.a2a_get_credential_from_files('myapikey', PySafeguard.A2ATypes.PASSWORD, PySafeguard.SshKeyFormats.OPENSSH, 'ssl/certificateuser.pem', 'ssl/certificateuser.key')
+privatekey = PySafeguardConnection.a2a_get_credential('myhost', 'myapikey', A2ATypes.PASSWORD, SshKeyFormats.OPENSSH, 'ssl/pathtocertuser.crt, ssl/pathtocertuser.key, ssl/pathtocertuser.pem)
 ```
 
 ## About the Safeguard API

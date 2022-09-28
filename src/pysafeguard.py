@@ -135,7 +135,7 @@ class PySafeguardConnection:
             keyFormat = SshKeyFormats.OPENSSH
 
         header = {
-            'Authorization': 'A2A {}'.format(apiKey)
+            'Authorization': f'A2A {apiKey}'
         }
         query = {
             'type': a2aType,
