@@ -84,7 +84,7 @@ A connection can also be made anonymously and without verifying the appliance ce
 ```Python
 from pysafeguard import *
 
-conn = PySafeguardConnection('safeguard.sample.corp', False)
+connection = PySafeguardConnection('safeguard.sample.corp', False)
 ```
 
 Authentication is also possible using an existing Safeguard API token:
@@ -166,9 +166,9 @@ print(json.dumps(result.json(),indent=2,sort_keys=True))
 ```Python
 from pysafeguard import *
 
-conn = PySafeguardConnection('myappliance', 'ssl/pathtoca.pem')
-conn.connect_password('username', 'password')
-minutes_left = conn.get_remaining_token_lifetime()
+connection = PySafeguardConnection('myappliance', 'ssl/pathtoca.pem')
+connection.connect_password('username', 'password')
+minutes_left = connection.get_remaining_token_lifetime()
 ```
 
 #### Register for SignalR events
