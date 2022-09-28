@@ -149,5 +149,36 @@ class PySafeguardConnection:
     def register_signalr(self, callback):
         #TODO: register the signalr callback
         #This will require a python module with targeting https://${hostName}/service/event/signalr
+        import time
+        from signalrcore.hub_connection_builder import HubConnectionBuilder
+        import logging
+        if self.UserToken == None:
+            raise Exception("You must be logged in first")
+        if ( callback  == None or callback == ""):
+            raise Exception("A callback must be specified to register for the SignalR events.")
+        self.token = self.UserToken
+        self.skip_negotiation = True
+        server_url = 'https://{0}/service/event/signalr'.format(self.host)
+        hub_connection = HubConnectionBuilder() \
+        .with_url(server_url, options={"verify_ssl": False}) \
+        .configure_logging(logging.DEBUG) \
+        .with_automatic_reconnect({
+           "type": "raw",
+           "keep_alive_interval": 10,
+           "reconnect_interval": 10,
+           "max_attempts": 0
+        }).build()
+
+        hub_connection.on("ReceiveMessage", print)
+        hub_connection.on_open(lambda: callback("in on_open callback: connection opened and handshake received ready to send messages"))
+        hub_connection.on_close(lambda: callback("in on_close callback: connection closed"))
+        hub_connection.start()
+        message = None
+        while message != "exit()":
+            message = input(">> ")
+            if message is not None and message != "" and message != "exit()":
+                hub_connection.send("SendMessage", ["foo", message])
+        hub_connection.stop()
+
         return
     
