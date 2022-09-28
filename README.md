@@ -183,10 +183,12 @@ print(json.dumps(result.json(),indent=2,sort_keys=True))
 
 #### Get remaining access token lifetime
 
-Sample can be found <a href="samples\AccessTokenLifetime">here</a>.
-
 ```Python
-#TODO: Decide if we want to add this functionality
+from pysafeguard import *
+
+conn = PySafeguardConnection('myappliance', 'ssl/pathtoca.pem')
+conn.connect_password('username', 'password')
+minutes_left = conn.get_remaining_token_lifetime()
 ```
 
 #### Register for SignalR events
