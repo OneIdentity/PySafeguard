@@ -22,8 +22,8 @@ using the Safeguard API programmatically.
 PySafeguard is provided to facilitate calling the Safeguard API from Python.
 It is meant to remove the complexity of dealing with authentication via
 Safeguard's embedded secure token service (STS). The basic usage is to call
-`connect()` to establish a connection to Safeguard, then you can call
-`invoke()` multiple times using the same authenticated connection.
+one of the `connect_*()` methods to establish a connection to Safeguard, then
+you can call `invoke()` multiple times using the same authenticated connection.
 
 PySafeguard also provides an easy way to call Safeguard A2A from Python. The A2A service requires client certificate authentication for retrieving passwords for application integration. When Safeguard A2A is properly configured, specified passwords can be retrieved with a single method call without requiring access request workflow approvals. Safeguard A2A is protected by API keys and IP restrictions in addition to client certificate authentication.
 
