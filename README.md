@@ -160,7 +160,7 @@ Sample can be found <a href="samples\AnonymousExample">here</a>.
 ```Python
 from pysafeguard import *
 
-connection = PySafeguardConnection(hostName, False)
+connection = PySafeguardConnection('safeguard.sample.corp', False)
 result = connection.invoke(HttpMethods.GET, Services.NOTIFICATION, 'Status')
 print(json.dumps(result.json(),indent=2,sort_keys=True))
 ```
@@ -172,9 +172,10 @@ Sample can be found <a href="samples\PasswordExample">here</a>.
 ```Python
 from pysafeguard import *
 
-connection = PySafeguardConnection('myappliance', 'ssl/pathtoca.pem')
+connection = PySafeguardConnection('safeguard.sample.corp', 'ssl/pathtoca.pem')
 connection.connect_password('username', 'password')
 minutes_left = connection.get_remaining_token_lifetime()
+print(minutes_left)
 ```
 
 #### Register for SignalR events

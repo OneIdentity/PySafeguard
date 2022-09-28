@@ -4,20 +4,20 @@ import json
 # The appliance host name or IP address
 hostName = ''
 
-# The user name for password authentication
-userName = ''
-
-# The password for passowrd authentication
-password = ''
-
 # Path to the trusted root ca of the appliance
 caFile = ''
+
+# Path to the .pem file for certificate authentication
+userCertFile = ''
+
+# Path to the corresponding .key file for certificate authentication
+userKeyFile = ''
 
 print('Connecting to Safeguard')
 connection = PySafeguardConnection(hostName, caFile)
 
 print('Logging in')
-connection.connect_password(userName, password)
+connection.connect_certificate(userCertFile, userKeyFile)
 
 print('Getting me')
 result = connection.invoke(HttpMethods.GET, Services.CORE, 'Me')
