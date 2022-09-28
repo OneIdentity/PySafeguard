@@ -55,13 +55,15 @@ class PySafeguardConnection:
         self.UserToken = None
         self.apiVersion = 'v4'
         self.req_globals = dict(verify=verify,cert=None)
-        self.headers = CaseInsensitiveDict({'Accept':'application/json','Content-type':'application/json'})
+        self.headers = CaseInsensitiveDict({'Accept':'application/json'})
 
     @staticmethod
     def __execute_web_request(httpMethod, url, body, headers, verify, cert):
-        dojson = 'application/json' in headers.get('content-type','').lower()
-        bodytype = dict(json=body) if dojson else dict(data=body)
-        with httpMethod(url, headers=headers, cert=cert, verify=verify, **bodytype) as req:
+        bodystyle = dict(data=body)
+        if body and httpMethod in [HttpMethods.POST, HttpMethods.PUT] and not headers.get('content-type'):
+            bodystyle = dict(json=body)
+            headers = _merge_idict(headers, {'Content-type':'application/json'})
+        with httpMethod(url, headers=headers, cert=cert, verify=verify, **bodystyle) as req:
             if req.status_code >= 200 and req.status_code < 300:
                 return req
             else:
