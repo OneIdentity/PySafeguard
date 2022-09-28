@@ -185,7 +185,7 @@ Sample can be found <a href="samples\AnonymousExample">here</a>.
 
 ```Python
 #TODO: give example targeting
-# PySafeguard.Services.NOTIFICATION, PySaeguard.HttpMethods.GET, 'v3/Status'
+# PySafeguard.Services.NOTIFICATION, PySafeguard.HttpMethods.GET, 'v3/Status'
 ```
 
 #### Get remaining access token lifetime
