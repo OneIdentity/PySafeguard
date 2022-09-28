@@ -49,6 +49,7 @@ connection.connect_password('Admin','Admin123')
 ```
 
 Password authentication to an external provider is as follows:
+(Sample can be found <a href="samples/externalprovider.py">here</a>.)
 
 ```Python
 from pysafeguard import *
@@ -56,6 +57,7 @@ from pysafeguard import *
 connection = PySafeguardConnection('safeguard.sample.corp', 'ssl/pathtoca.pem')
 connection.connect_password('Admin','Admin123', 'myexternalprovider')
 ```
+
 
 Client certificate authentication is also available. This can be done using PEM and KEY file.
 
