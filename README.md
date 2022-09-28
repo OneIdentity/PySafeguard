@@ -167,6 +167,8 @@ print(json.dumps(result.json(),indent=2,sort_keys=True))
 
 #### Get remaining access token lifetime
 
+Sample can be found <a href="samples\PasswordExample">here</a>.
+
 ```Python
 from pysafeguard import *
 
