@@ -44,30 +44,26 @@ A simple code example for calling the Safeguard API with username and password a
 ```Python
 from pysafeguard import *
 
-conn = PySafeguardConnection('safeguard.sample.corp', 'ssl/pathtocertuser.pem')
-conn.connect_password('Admin','Admin123')
-req = conn.invoke(HttpMethods.GET,Services.CORE,'Me')
+connection = PySafeguardConnection('safeguard.sample.corp', 'ssl/pathtoca.pem')
+connection.connect_password('Admin','Admin123')
 ```
 
 Password authentication to an external provider is as follows:
 
 ```Python
-#TODO: Update for latest code
 from pysafeguard import *
 
-conn = PySafeguardConnection('safeguard.sample.corp', 'ssl/pathtocertuser.pem')
-conn.connect_password('Admin','Admin123', 'myexternalprovider')
-req = conn.invoke(HttpMethods.GET,Services.CORE,'Me')
+connection = PySafeguardConnection('safeguard.sample.corp', 'ssl/pathtoca.pem')
+connection.connect_password('Admin','Admin123', 'myexternalprovider')
 ```
 
 Client certificate authentication is also available. This can be done either using a PFX certificate file or a PEM and KEY.
 
 ```Python
-#TODO: Update for latest code
 from pysafeguard import *
 
-conn = PySafeguardConnection('safeguard.sample.corp', 'ssl/ca.pem')
-conn.connect_certificate('ssl/certificateuser.pem', 'ssl/certificateuser.key)
+connection = PySafeguardConnection('safeguard.sample.corp', 'ssl/ca.pem')
+connection.connect_certificate('ssl/pathtocertuser.pem', 'ssl/pathtocertuser.key)
 ```
 
 ```Python
@@ -181,6 +177,9 @@ Sample can be found <a href="samples\AnonymousExample">here</a>.
 ```Python
 #TODO: give example targeting
 # PySafeguard.Services.NOTIFICATION, PySafeguard.HttpMethods.GET, 'v3/Status'
+connection = PySafeguardConnection(hostName, False)
+result = connection.invoke(HttpMethods.GET, Services.NOTIFICATION, 'Status')
+print(json.dumps(result.json(),indent=2,sort_keys=True))
 ```
 
 #### Get remaining access token lifetime
