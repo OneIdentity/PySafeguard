@@ -75,7 +75,7 @@ Client certificate authentication to an external provider is also available. Thi
 from pysafeguard import *
 
 connection = PySafeguardConnection('safeguard.sample.corp', 'ssl/pathtoca.pem')
-connection.connect_certificate('ssl/certificateuser.pem', 'ssl/certificateuser.key', 'myexternalprovider')
+connection.connect_certificate('ssl/pathtocertuser.pem', 'ssl/pathtocertuser.key', 'myexternalprovider')
 ```
 
 
@@ -107,7 +107,7 @@ To retrieve a password via A2A:
 ```Python
 from pysafeguard import *
 
-password = PySafeguardConnection.a2a_get_credential('applianceaddress', 'myapikey', 'ssl/certificateuser.pem', 'ssl/certificateuser.key', 'ssl/ca.pem')
+password = PySafeguardConnection.a2a_get_credential('applianceaddress', 'myapikey', 'ssl/pathtocertuser.pem', 'ssl/pathtocertuser.key', 'ssl/pathtoca.pem')
 ```
 
 To retrieve a private key in OpenSSH format via A2A:
@@ -115,7 +115,7 @@ To retrieve a private key in OpenSSH format via A2A:
 ```Python
 from pysafeguard import *
 
-privatekey = PySafeguardConnection.a2a_get_credential('applianceaddress', 'myapikey', 'ssl/certificateuser.pem', 'ssl/certificateuser.key', 'ssl/ca.pem', A2ATypes.PRIVATEKEY)
+privatekey = PySafeguardConnection.a2a_get_credential('applianceaddress', 'myapikey', 'ssl/pathtocertuser.pem', 'ssl/pathtocertuser.key', 'ssl/pathtoca.pem', A2ATypes.PRIVATEKEY)
 ```
 
 ## About the Safeguard API
@@ -156,6 +156,8 @@ provides read-only information for status, etc.
 Sample can be found <a href="samples\AnonymousExample">here</a>.
 
 ```Python
+from pysafeguard import *
+
 connection = PySafeguardConnection(hostName, False)
 result = connection.invoke(HttpMethods.GET, Services.NOTIFICATION, 'Status')
 print(json.dumps(result.json(),indent=2,sort_keys=True))
