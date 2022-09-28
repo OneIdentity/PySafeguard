@@ -23,7 +23,7 @@ PySafeguard is provided to facilitate calling the Safeguard API from Python.
 It is meant to remove the complexity of dealing with authentication via
 Safeguard's embedded secure token service (STS). The basic usage is to call
 `connect()` to establish a connection to Safeguard, then you can call
-`invoke_web_request()` multiple times using the same authenticated connection.
+`invoke()` multiple times using the same authenticated connection.
 
 PySafeguard also provides an easy way to call Safeguard A2A from Python. The A2A service requires client certificate authentication for retrieving passwords for application integration. When Safeguard A2A is properly configured, specified passwords can be retrieved with a single method call without requiring access request workflow approvals. Safeguard A2A is protected by API keys and IP restrictions in addition to client certificate authentication.
 
@@ -57,45 +57,29 @@ connection = PySafeguardConnection('safeguard.sample.corp', 'ssl/pathtoca.pem')
 connection.connect_password('Admin','Admin123', 'myexternalprovider')
 ```
 
-Client certificate authentication is also available. This can be done either using a PFX certificate file or a PEM and KEY.
+Client certificate authentication is also available. This can be done using PEM and KEY file.
 
 ```Python
 from pysafeguard import *
 
-connection = PySafeguardConnection('safeguard.sample.corp', 'ssl/ca.pem')
+connection = PySafeguardConnection('safeguard.sample.corp', 'ssl/pathtoca.pem')
 connection.connect_certificate('ssl/pathtocertuser.pem', 'ssl/pathtocertuser.key')
-```
-
-```Python
-#TODO: Update for latest code
-from pysafeguard import *
-
-conn = PySafeguardConnection('safeguard.sample.corp', 'ssl/ca.pem')
-conn.connect_certificate(null, null, 'ssl/certificateuser.pfx')
 ```
 
 > **Note**  
 > Password protected certificates are not currently supported in PySafeguard.
 
-Client certificate authentication to an external provider is also available. This can again be done either using a PFX certificate file or a PEM and KEY.
+Client certificate authentication to an external provider is also available. This can be done using PEM and KEY file.
 
 ```Python
-#TODO: Update for latest code
 from pysafeguard import *
 
-conn = PySafeguardConnection('safeguard.sample.corp', 'ssl/ca.pem')
-conn.connect_certificate('ssl/certificateuser.pem', 'ssl/certificateuser.key', None, 'myexternalprovider')
+connection = PySafeguardConnection('safeguard.sample.corp', 'ssl/pathtoca.pem')
+connection.connect_certificate('ssl/certificateuser.pem', 'ssl/certificateuser.key', 'myexternalprovider')
 ```
 
-```Python
-#TODO: Update for latest code
-from pysafeguard import *
 
-conn = PySafeguardConnection('safeguard.sample.corp', 'ssl/ca.pem')
-conn.connect_certificate(None, None, 'ssl/certificateuser.pfx', 'myexternalprovider')
-```
-
-A connection can also be made anonymously 
+A connection can also be made anonymously and without verifying the appliance certificate.
 
 ```Python
 from pysafeguard import *
@@ -106,12 +90,10 @@ conn = PySafeguardConnection('safeguard.sample.corp', False)
 Authentication is also possible using an existing Safeguard API token:
 
 ```Python
-#TODO: Update for latest code
 from pysafeguard import *
 
-apiToken = get_token_somehow()
-conn = PySafeguardConnection('safeguard.sample.corp')
-conn.set_user_token(apiToken)
+connection = PySafeguardConnection('safeguard.sample.corp', 'ssl/pathtoca.pem')
+connection.connect_token(myApiToken)
 ```
 > **Note**  
 > Two-factor authentication is not currently supported in PySafeguard.
@@ -174,8 +156,6 @@ provides read-only information for status, etc.
 Sample can be found <a href="samples\AnonymousExample">here</a>.
 
 ```Python
-#TODO: give example targeting
-# PySafeguard.Services.NOTIFICATION, PySafeguard.HttpMethods.GET, 'v3/Status'
 connection = PySafeguardConnection(hostName, False)
 result = connection.invoke(HttpMethods.GET, Services.NOTIFICATION, 'Status')
 print(json.dumps(result.json(),indent=2,sort_keys=True))
