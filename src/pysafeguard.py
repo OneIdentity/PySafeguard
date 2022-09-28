@@ -69,6 +69,23 @@ class PySafeguardConnection:
             else:
                 raise WebRequestError(req)
 
+    @staticmethod
+    def a2a_get_credential(host, apiKey, cert, key, verify=True, a2aType=A2ATypes.PASSWORD, keyFormat=SshKeyFormats.OPENSSH, apiVersion='v4'):
+        if not apiKey:
+            raise Exception("apiKey may not be null or empty")
+
+        if not cert and not key:
+            raise Exception("cert path and key path may not be null or empty")
+
+        header = {
+            'Authorization': f'A2A {apiKey}'
+        }
+        query = _merge_dict(dict(type=a2aType), dict(keyFormat=keyFormat) if a2aType == A2ATypes.PRIVATEKEY else {})
+        credential = PySafeguardConnection.__execute_web_request(HttpMethods.GET, _assemble_url(host, _assemble_path(Services.A2A, apiVersion, "Credentials"), query), body={}, headers=header, verify=verify, cert=(cert, key))
+        if credential.status_code != 200:
+            raise WebRequestError(credential)
+        return credential.json()
+
     def get_provider_id(self, name):
         req = self.invoke(HttpMethods.POST, Services.RSTS, 'UserLogin/LoginController', query=dict(redirect_uri='urn:InstalledApplication', loginRequestStep=1, response_type='token'), body='RelayState=', additionalHeaders={'Content-type':'application/x-www-form-urlencoded'})
         response = req.json()
@@ -116,23 +133,6 @@ class PySafeguardConnection:
         url = _assemble_url(host or self.host, _assemble_path(httpService, self.apiVersion if httpService != Services.RSTS else '', endpoint), query)
         merged_headers = _merge_idict(self.headers, additionalHeaders)
         return PySafeguardConnection.__execute_web_request(httpMethod, url, body, merged_headers, **_merge_dict(self.req_globals, cert=cert))
-
-    @staticmethod
-    def a2a_get_credential(host, apiKey, cert, key, verify=True, a2aType=A2ATypes.PASSWORD, keyFormat=SshKeyFormats.OPENSSH, apiVersion='v4'):
-        if not apiKey:
-            raise Exception("apiKey may not be null or empty")
-
-        if not cert and not key:
-            raise Exception("cert path and key path may not be null or empty")
-
-        header = {
-            'Authorization': f'A2A {apiKey}'
-        }
-        query = _merge_dict(dict(type=a2aType), dict(keyFormat=keyFormat) if a2aType == A2ATypes.PRIVATEKEY else {})
-        credential = PySafeguardConnection.__execute_web_request(HttpMethods.GET, _assemble_url(host, _assemble_path(Services.A2A, apiVersion, "Credentials"), query), body={}, headers=header, verify=verify, cert=(cert, key))
-        if credential.status_code != 200:
-            raise WebRequestError(credential)
-        return credential.json()
 
     def get_remaining_token_lifetime(self):
         req = self.invoke(HttpMethods.GET, Services.APPLIANCE, 'SystemTime')
