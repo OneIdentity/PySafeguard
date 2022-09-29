@@ -65,8 +65,8 @@ following methods to establish trust.
 
   In Bourne Shell:
   ```Bash
-  > export WEBSOCKET_CLIENT_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
-  > export REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+  $ export WEBSOCKET_CLIENT_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+  $ export REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
   ```
   
   In PowerShell:
