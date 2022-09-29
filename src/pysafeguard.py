@@ -141,7 +141,6 @@ class PySafeguardConnection:
 
     def register_signalr(host, callback, options):
         from signalrcore.hub_connection_builder import HubConnectionBuilder
-        import logging
         if not callback:
             raise Exception("A callback must be specified to register for the SignalR events.")
         server_url = 'https://{0}/service/event/signalr'.format(host)
