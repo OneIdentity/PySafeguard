@@ -138,8 +138,35 @@ class PySafeguardConnection:
         req = self.invoke(HttpMethods.GET, Services.APPLIANCE, 'SystemTime')
         return req.headers.get('X-tokenlifetimeremaining')
 
-    def register_signalr(self, callback):
-        #TODO: register the signalr callback
-        #This will require a python module with targeting https://${hostName}/service/event/signalr
-        return
+    def register_signalr(host, callback, options):
+        from signalrcore.hub_connection_builder import HubConnectionBuilder
+        import logging
+        if ( callback  == None or callback == ""):
+            raise Exception("A callback must be specified to register for the SignalR events.")
+        server_url = 'https://{0}/service/event/signalr'.format(host)
+        hub_connection = HubConnectionBuilder() \
+        .with_url(server_url, options=options) \
+        .with_automatic_reconnect({
+           "type": "raw",
+           "keep_alive_interval": 10,
+           "reconnect_interval": 10,
+           "max_attempts": 5
+        }).build()
+
+        hub_connection.on("ReceiveMessage", callback)
+        hub_connection.on("NotifyEventAsync", callback)
+        hub_connection.on_open(lambda: print("in on_open callback: connection opened and handshake received ready to send messages"))
+        hub_connection.on_close(lambda: print("in on_close callback: connection closed"))
+        hub_connection.start()
+
+    @staticmethod
+    def register_signalr_username(host, callback, conn, username, password):
+        options = options={"access_token_factory": lambda: conn.connect_password(username, password)}
+        PySafeguardConnection.register_signalr(host, callback, options)
+
+    @staticmethod
+    def register_signalr_certificate(host, callback, conn, certfile, keyfile):
+        print("in cert")
+        options = options={"access_token_factory": lambda: conn.connect_certificate(certfile, keyfile, provider="certificate")}
+        PySafeguardConnection.register_signalr(host, callback, options)
     
