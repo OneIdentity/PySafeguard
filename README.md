@@ -61,31 +61,28 @@ If the system is already properly configured, the SDK should work
 without any errors.  If there are errors, consider using one of the
 following methods to establish trust.
 
-<ul>
-    <li>Environment variable providing path to certificates</li>
+- Environment variable providing path to certificates</li>
 
-    In Bourne Shell:
-    ```Bash
-    > export WEBSOCKET_CLIENT_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
-    > export REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
-    ```
+  In Bourne Shell:
+  ```Bash
+  > export WEBSOCKET_CLIENT_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+  > export REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+  ```
+  
+  In PowerShell:
+  ```Powershell
+  > $env:WEBSOCKET_CLIENT_CA_BUNDLE="c:\ssl\certs\ca-certificates.crt"
+  > $env:REQUESTS_CA_BUNDLE="c:ssl\certs\ca-certificates.crt"
+  ```
+  
+- Use the `verify` option when creating the `PySafeguardConnection`</li>
 
-    In PowerShell:
-    ```Powershell
-    > $env:WEBSOCKET_CLIENT_CA_BUNDLE="c:\ssl\certs\ca-certificates.crt"
-    > $env:REQUESTS_CA_BUNDLE="c:ssl\certs\ca-certificates.crt"
-    ```
+  See examples below for utilizing this method.  While `verify` can be
+  used to disable security checking this is not recommended.
 
-    <li>Use the `verify` option when creating the `PySafeguardConnection`</li>
-
-    See examples below for utilizing this method.  While `verify` can be
-    used to disable security checking this is not recommended.
-
-    > **Note**  
-    > The WEBSOCKET_CLIENT_CA_BUNDLE environment variable is only necessary
-    > when working with SignalR.  Also, `verify` does not pertain to SignalR.
-
-</ul>
+  > **Note**  
+  > The WEBSOCKET_CLIENT_CA_BUNDLE environment variable is only necessary
+  > when working with SignalR.  Also, `verify` does not pertain to SignalR.
 
 ## Getting Started
 
