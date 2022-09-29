@@ -87,6 +87,7 @@ A connection can also be made anonymously and without verifying the appliance ce
 from pysafeguard import *
 
 connection = PySafeguardConnection('safeguard.sample.corp', False)
+system_time = connection.invoke(HttpMethods.GET, Services.APPLIANCE, 'SystemTime')
 ```
 
 Authentication is also possible using an existing Safeguard API token:
