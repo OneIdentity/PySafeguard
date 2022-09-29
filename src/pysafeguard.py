@@ -175,8 +175,8 @@ class PySafeguardConnection:
         PySafeguardConnection.register_signalr(host, callback, options)
 
     @staticmethod
-    def register_signalr_certificate(host, callback, conn):
+    def register_signalr_certificate(host, callback, conn, certfile, keyfile):
         print("in cert")
-        options = options={"access_token_factory": lambda: conn.connect_certificate(provider="certificate")}
+        options = options={"access_token_factory": lambda: conn.connect_certificate(certfile, keyfile, provider="certificate")}
         PySafeguardConnection.register_signalr(host, callback, options)
     
