@@ -80,9 +80,9 @@ following methods to establish trust.
   See examples below for utilizing this method.  While `verify` can be
   used to disable security checking this is not recommended.
 
-  > **Note**  
-  > The WEBSOCKET_CLIENT_CA_BUNDLE environment variable is only necessary
-  > when working with SignalR.  Also, `verify` does not pertain to SignalR.
+> **Note**  
+> The WEBSOCKET_CLIENT_CA_BUNDLE environment variable is only necessary
+> when working with SignalR.  Also, `verify` does not pertain to SignalR.
 
 ## Getting Started
 
