@@ -156,7 +156,7 @@ provides read-only information for status, etc.
 
 #### Anonymous Call for Safeguard Status
 
-Sample can be found <a href="samples\AnonymousExample">here</a>.
+Sample can be found <a href="samples\AnonymousExample.py">here</a>.
 
 ```Python
 from pysafeguard import *
@@ -168,7 +168,7 @@ print(json.dumps(result.json(),indent=2,sort_keys=True))
 
 #### Get remaining access token lifetime
 
-Sample can be found <a href="samples\PasswordExample">here</a>.
+Sample can be found <a href="samples\PasswordExample.py">here</a>.
 
 ```Python
 from pysafeguard import *
@@ -180,6 +180,12 @@ print(minutes_left)
 ```
 
 #### Register for SignalR events
+
+To use the SignalR functionality, you will need to install the python SignalR Core client module
+
+```Python
+pip install signalrcore
+```
 
 Sample can be found <a href="samples\SignalRExample.py">here</a>.
 
@@ -198,10 +204,12 @@ connection.register_signalr_username(hostName, signalrcallback, connection, user
 print("Connecting to SignalR via certifacte")
 connection.register_signalr_certificate(hostName, signalrcallback, connection, userCertFile, userKeyFile)
 ```
+> **Note**  
+> Password protected certificates are not currently supported in PySafeguard.
 
 #### Create a New User and Set the Password
 
-Sample can be found <a href="samples\NewUserExample">here</a>.
+Sample can be found <a href="samples\NewUserExample.py">here</a>.
 
 ```Python
 #TODO: Give example of creating a new user and setting the user's password
