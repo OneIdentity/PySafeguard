@@ -184,7 +184,19 @@ print(minutes_left)
 Sample can be found <a href="samples\SignalRExample.py">here</a>.
 
 ```Python
-#TODO: give example of signalr
+from pysafeguard import *
+
+connection = PySafeguardConnection(hostName, caFile)
+
+# SignalR callback function to handle the signalR messages
+def signalrcallback(results):
+    print("Received SignalR event: {0}".format(results[0]['Message']))
+
+print("Connecting to SignalR via username/password")
+connection.register_signalr_username(hostName, signalrcallback, connection, userName, password)
+
+print("Connecting to SignalR via certifacte")
+connection.register_signalr_certificate(hostName, signalrcallback, connection, userCertFile, userKeyFile)
 ```
 
 #### Create a New User and Set the Password
