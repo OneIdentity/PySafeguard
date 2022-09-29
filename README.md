@@ -49,16 +49,43 @@ In addition if you will be using the SignalR functionality you will need to inst
 > pip install signalrcore
 ```
 
-You will also need to make sure your environment is setup with the necessary certificates
+### Communicating securely with Safeguard using the SDK
 
-```Bash
-> export WEBSOCKET_CLIENT_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
-> export REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
-```
-```Powershell
-> $env:WEBSOCKET_CLIENT_CA_BUNDLE="c:\ssl\certs\ca-certificates.crt"
-> $env:REQUESTS_CA_BUNDLE="c:ssl\certs\ca-certificates.crt"
-```
+When using the SDK to communicate with Safeguard, all communication will
+be done using HTTPS.  To keep the communication secure, all certificates
+used to secure Safeguard's API should be configured on the system where
+the SDK is used.  How this is accomplished varies on each system,
+however, here are some tips that can help get started.
+
+If the system is already properly configured, the SDK should work
+without any errors.  If there are errors, consider using one of the
+following methods to establish trust.
+
+<ul>
+    <li>Environment variable providing path to certificates</li>
+
+    In Bourne Shell:
+    ```Bash
+    > export WEBSOCKET_CLIENT_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+    > export REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+    ```
+
+    In PowerShell:
+    ```Powershell
+    > $env:WEBSOCKET_CLIENT_CA_BUNDLE="c:\ssl\certs\ca-certificates.crt"
+    > $env:REQUESTS_CA_BUNDLE="c:ssl\certs\ca-certificates.crt"
+    ```
+
+    <li>Use the `verify` option when creating the `PySafeguardConnection`</li>
+
+    See examples below for utilizing this method.  While `verify` can be
+    used to disable security checking this is not recommended.
+
+    > **Note**  
+    > The WEBSOCKET_CLIENT_CA_BUNDLE environment variable is only necessary
+    > when working with SignalR.  Also, `verify` does not pertain to SignalR.
+
+</ul>
 
 ## Getting Started
 
