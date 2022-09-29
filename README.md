@@ -181,7 +181,7 @@ print(minutes_left)
 
 #### Register for SignalR events
 
-Sample can be found <a href="samples\SignalRExample">here</a>.
+Sample can be found <a href="samples\SignalRExample.py">here</a>.
 
 ```Python
 #TODO: give example of signalr
