@@ -240,7 +240,7 @@ class PySafeguardConnection:
             conn.connect_password(username, password)
             return conn.UserToken
         options = {"access_token_factory": _token_factory_username}
-        PySafeguardConnection.register_signalr(conn.host, callback, options, bool(conn.req_globals.get('verify',True)))
+        PySafeguardConnection.__register_signalr(conn.host, callback, options, bool(conn.req_globals.get('verify',True)))
 
     @staticmethod
     def register_signalr_certificate(conn, callback, certfile, keyfile):
@@ -256,5 +256,5 @@ class PySafeguardConnection:
             conn.connect_certificate(certfile, keyfile, provider="certificate")
             return conn.UserToken
         options = options={"access_token_factory": _token_factory_certificate}
-        PySafeguardConnection.register_signalr(conn.host, callback, options, bool(conn.req_globals.get('verify',True)))
+        PySafeguardConnection.__register_signalr(conn.host, callback, options, bool(conn.req_globals.get('verify',True)))
     
