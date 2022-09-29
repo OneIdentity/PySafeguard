@@ -1,14 +1,21 @@
+[build-system]
+#https://python-poetry.org/docs/pyproject
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
 [tool.poetry]
 name = "pysafeguard"
 description = "One Identity Safeguard Python Package"
-version = "0.0.1"
+version = "0.0.30"
 readme = "README.md"
 keywords = ["safeguard","oneidentity"]
-repository =  "https://github.com/OneIdentity/PySafeguard"
+repository = "https://github.com/OneIdentity/PySafeguard"
 authors = [
     "Tania Engel <Tania.Engel@oneidentity.com>",
+]
+maintainers = [
     "Rich Gagliano <Rich.Gagliano@oneidentity.com>",
-    "Andy Bradford <Andy.Bradford@oneidentity.com>",
+    "Edward Mun <Edward.Mun@oneidentity.com>",
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -16,5 +23,14 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
+[tool.poetry.urls]
+"Bug Tracker" = "https://github.com/OneIdentity/PySafeguard/issues"
+
 [tool.poetry.dependencies]
 python = "^3.7"
+requests = "^2.28.1"
+#signalrcore is optional because it is only imported for SignalR functionality
+signalrcore = { version="^0.9.5", optional = true }
+
+[tool.poetry.extras]
+signalr = ["signalrcore"]
