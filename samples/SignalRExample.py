@@ -8,7 +8,7 @@ hostName = ''
 # The user name for password authentication
 userName = ''
 
-# The password for passowrd authentication
+# The password for password authentication
 password = ''
 
 # Path to the trusted root ca of the appliance

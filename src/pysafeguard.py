@@ -204,7 +204,7 @@ class PySafeguardConnection:
         return req.headers.get('X-tokenlifetimeremaining')
 
     @staticmethod
-    def register_signalr(host, callback, options, verify):
+    def __register_signalr(host, callback, options, verify):
         """Register a SignalR callback and start listening."""
         from signalrcore.hub_connection_builder import HubConnectionBuilder
         if not callback:
@@ -228,7 +228,14 @@ class PySafeguardConnection:
 
     @staticmethod
     def register_signalr_username(conn, callback, username, password):
-        """Wrapper to register a SignalR callback using username/password authentication."""
+        """Wrapper to register a SignalR callback using username/password authentication.
+        
+        Arguments:
+        conn -- PySafeguardConnection instance object
+        callback -- Callback function to handle messages that come back
+        username -- Username for authentication
+        password -- Password for authentication
+        """
         def _token_factory_username():
             conn.connect_password(username, password)
             return conn.UserToken
@@ -237,7 +244,14 @@ class PySafeguardConnection:
 
     @staticmethod
     def register_signalr_certificate(conn, callback, certfile, keyfile):
-        """Wrapper to register a SignalR callback using certificate authentication."""
+        """Wrapper to register a SignalR callback using certificate authentication.
+        
+        Arguments:
+        conn -- PySafeguardConnection instance object
+        callback -- Callback function to handle messages that come back
+        certfile -- Path to the user certificate in pem format.
+        keyfile -- Path to the user certificate's key in key format.
+        """
         def _token_factory_certificate():
             conn.connect_certificate(certfile, keyfile, provider="certificate")
             return conn.UserToken
