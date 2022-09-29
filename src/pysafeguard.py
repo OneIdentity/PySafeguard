@@ -142,7 +142,7 @@ class PySafeguardConnection:
     def register_signalr(host, callback, options):
         from signalrcore.hub_connection_builder import HubConnectionBuilder
         import logging
-        if ( callback  == None or callback == ""):
+        if not callback:
             raise Exception("A callback must be specified to register for the SignalR events.")
         server_url = 'https://{0}/service/event/signalr'.format(host)
         hub_connection = HubConnectionBuilder() \
@@ -162,7 +162,7 @@ class PySafeguardConnection:
 
     @staticmethod
     def register_signalr_username(host, callback, conn, username, password):
-        options = options={"access_token_factory": lambda: conn.connect_password(username, password)}
+        options = {"access_token_factory": lambda: conn.connect_password(username, password)}
         PySafeguardConnection.register_signalr(host, callback, options)
 
     @staticmethod

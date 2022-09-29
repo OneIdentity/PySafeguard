@@ -37,6 +37,29 @@ This Python module is published to the [PyPi registry](https://pypi.org/manage/p
 > pip install pysafeguard
 ```
 
+## Dependencies
+pysafeguard uses the python requests module, which will need to be installed prior to using pysafeguard
+
+```Bash
+> pip install requests
+```
+In addition if you will be using the SignalR functionality you will need to install SignalR Core client module.  SignalR Core client is only required if using the SignalR functionality
+
+```Bash
+> pip install signalrcore
+```
+
+You will also need to make sure your environment is setup with the necessary certificates
+
+```Bash
+> export WEBSOCKET_CLIENT_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+> export REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+```
+```Powershell
+> $env:WEBSOCKET_CLIENT_CA_BUNDLE="c:\ssl\certs\ca-certificates.crt"
+> $env:REQUESTS_CA_BUNDLE="c:ssl\certs\ca-certificates.crt"
+```
+
 ## Getting Started
 
 A simple code example for calling the Safeguard API with username and password authentication through the local Safeguard STS:
@@ -156,7 +179,7 @@ provides read-only information for status, etc.
 
 #### Anonymous Call for Safeguard Status
 
-Sample can be found <a href="samples\AnonymousExample">here</a>.
+Sample can be found <a href="samples\AnonymousExample.py">here</a>.
 
 ```Python
 from pysafeguard import *
@@ -168,7 +191,7 @@ print(json.dumps(result.json(),indent=2,sort_keys=True))
 
 #### Get remaining access token lifetime
 
-Sample can be found <a href="samples\PasswordExample">here</a>.
+Sample can be found <a href="samples\PasswordExample.py">here</a>.
 
 ```Python
 from pysafeguard import *
@@ -180,6 +203,12 @@ print(minutes_left)
 ```
 
 #### Register for SignalR events
+
+To use the SignalR functionality, you will need to install the python SignalR Core client module
+
+```Bash
+> pip install signalrcore
+```
 
 Sample can be found <a href="samples\SignalRExample.py">here</a>.
 
@@ -198,10 +227,12 @@ connection.register_signalr_username(hostName, signalrcallback, connection, user
 print("Connecting to SignalR via certifacte")
 connection.register_signalr_certificate(hostName, signalrcallback, connection, userCertFile, userKeyFile)
 ```
+> **Note**  
+> Password protected certificates are not currently supported in PySafeguard.
 
 #### Create a New User and Set the Password
 
-Sample can be found <a href="samples\NewUserExample">here</a>.
+Sample can be found <a href="samples\NewUserExample.py">here</a>.
 
 ```Python
 #TODO: Give example of creating a new user and setting the user's password
