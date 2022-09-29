@@ -108,6 +108,7 @@ class PySafeguardConnection:
                 raise WebRequestError(req)
         else:
             raise WebRequestError(req)
+        return self.UserToken
 
     def connect_password(self, user_name, password, provider='local'):
         body = {
