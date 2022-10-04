@@ -43,16 +43,16 @@ stages:
         inputs:
           targetType: 'inline'
           script: |
-            # The README.md gets published and is what folks see on the PyPi/project/pysafeguard so the relative paths
+            # The README.md gets published to PyPi/project/pysafeguard so the relative paths, which work while on GitHub,
             # must be updated to absolute paths.
             
             $file = "README.md"
-            (Get-Content $file).replace('<a href="samples">sample projects</a>', "[sample projects](https://github.com/OneIdentity/PySafeguard/tree/release/$Env:BUILD_SOURCEBRANCHNAME/samples)") | Set-Content $file
-            (Get-Content $file).replace('<a href="samples\PasswordExternalExample.py">here</a>', "[here](https://github.com/OneIdentity/PySafeguard/tree/release/$Env:BUILD_SOURCEBRANCHNAME/samples/PasswordExternalExample.py)") | Set-Content $file
-            (Get-Content $file).replace('<a href="samples\PasswordExample.py">here</a>', "[here](https://github.com/OneIdentity/PySafeguard/tree/release/$Env:BUILD_SOURCEBRANCHNAME/samples/PasswordExample.py)") | Set-Content $file
-            (Get-Content $file).replace('<a href="samples\AnonymousExample.py">here</a>', "[here](https://github.com/OneIdentity/PySafeguard/tree/release/$Env:BUILD_SOURCEBRANCHNAME/samples/AnonymousExample.py)") | Set-Content $file
-            (Get-Content $file).replace('<a href="samples\SignalRExample.py">here</a>', "[here](https://github.com/OneIdentity/PySafeguard/tree/release/$Env:BUILD_SOURCEBRANCHNAME/samples/SignalRExample.py)") | Set-Content $file
-            (Get-Content $file).replace('<a href="samples\NewUserExample.py">here</a>', "[here](https://github.com/OneIdentity/PySafeguard/tree/release/$Env:BUILD_SOURCEBRANCHNAME/samples/NewUserExample.py)") | Set-Content $file
+            (Get-Content $file).replace('<a href="samples">sample projects</a>', "<a href='https://github.com/OneIdentity/PySafeguard/blob/$Env:BUILD_SOURCEBRANCHNAME/samples'>sample projects</a>") | Set-Content $file
+            (Get-Content $file).replace('<a href="samples\PasswordExternalExample.py">here</a>', "<a href='https://github.com/OneIdentity/PySafeguard/blob/$Env:BUILD_SOURCEBRANCHNAME/samples/PasswordExternalExample.py'>here</a>") | Set-Content $file
+            (Get-Content $file).replace('<a href="samples\PasswordExample.py">here</a>', "<a href='https://github.com/OneIdentity/PySafeguard/blob/$Env:BUILD_SOURCEBRANCHNAME/samples/PasswordExample.py'>here</a>") | Set-Content $file
+            (Get-Content $file).replace('<a href="samples\AnonymousExample.py">here</a>', "<a href='https://github.com/OneIdentity/PySafeguard/blob/$Env:BUILD_SOURCEBRANCHNAME/samples/AnonymousExample.py'>here</a>") | Set-Content $file
+            (Get-Content $file).replace('<a href="samples\SignalRExample.py">here</a>', "<a href='https://github.com/OneIdentity/PySafeguard/blob/$Env:BUILD_SOURCEBRANCHNAME/samples/SignalRExample.py'>here</a>") | Set-Content $file
+            (Get-Content $file).replace('<a href="samples\NewUserExample.py">here</a>', "<a href='https://github.com/OneIdentity/PySafeguard/blob/$Env:BUILD_SOURCEBRANCHNAME/samples/NewUserExample.py'>here</a>") | Set-Content $file
           failOnStderr: true
           
       - script: |
