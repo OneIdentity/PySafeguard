@@ -98,7 +98,7 @@ print('Connected to Safeguard as %s' % me.json()['DisplayName'])
 ```
 
 Password authentication to an external provider is as follows:
-(Sample can be found <a href="samples/externalprovider.py">here</a>.)
+(Sample can be found <a href="samples\PasswordExternalExample.py">here</a>.)
 
 ```Python
 from pysafeguard import *
