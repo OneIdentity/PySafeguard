@@ -39,6 +39,7 @@ stages:
 
       - task: PowerShell@2
         displayName: Update README.md with absolute paths
+        condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/')
         inputs:
           targetType: 'inline'
           script: |
@@ -53,7 +54,6 @@ stages:
             (Get-Content $file).replace('<a href="samples\SignalRExample.py">here</a>', "[here](https://github.com/OneIdentity/PySafeguard/tree/release/$Env:BUILD_SOURCEBRANCHNAME/samples/SignalRExample.py)") | Set-Content $file
             (Get-Content $file).replace('<a href="samples\NewUserExample.py">here</a>', "[here](https://github.com/OneIdentity/PySafeguard/tree/release/$Env:BUILD_SOURCEBRANCHNAME/samples/NewUserExample.py)") | Set-Content $file
           failOnStderr: true
-          condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/')
           
       - script: |
          poetry build
