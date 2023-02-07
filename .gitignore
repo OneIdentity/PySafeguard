@@ -71,6 +71,9 @@ instance/
 # Sphinx documentation
 docs/_build/
 
+# PyCharm -- not everyone wants to use it
+.idea
+
 # PyBuilder
 target/
 
