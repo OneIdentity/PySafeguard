@@ -22,6 +22,7 @@ class HttpMethods:
 class A2ATypes:
     PASSWORD = "password"
     PRIVATEKEY = "privatekey"
+    APIKEYSECRET = "apikey"
 
 class SshKeyFormats:
     OPENSSH = "openssh"
