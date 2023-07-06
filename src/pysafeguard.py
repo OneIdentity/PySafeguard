@@ -113,14 +113,13 @@ class PySafeguardConnection:
         Returns:
         A string value which is the ID of a configured provider
         """
-        req = self.invoke(HttpMethods.POST, Services.RSTS, 'UserLogin/LoginController', query=dict(redirect_uri='urn:InstalledApplication', loginRequestStep=1, response_type='token'), body='RelayState=', additionalHeaders={'Content-type':'application/x-www-form-urlencoded'})
-        response = req.json()
-        providers = response.get('Providers',[])
-        matches = list(filter(lambda x: name == x['DisplayName'], providers))
+        req = self.invoke(HttpMethods.GET, Services.CORE, 'AuthenticationProviders')
+        providers = req.json()
+        matches = list(filter(lambda x: name.upper() == x['Name'].upper(), providers))
         if matches:
-            return matches[0]['Id']
+            return matches[0]['RstsProviderId']
         else:
-            raise Exception('Unable to find Provider with DisplayName {} in\n{}'.format(name,json.dumps(providers,indent=2,sort_keys=True)))
+            raise Exception('Unable to find Provider with Name {} in\n{}'.format(name,json.dumps(providers,indent=2,sort_keys=True)))
 
     def __connect(self, body, *args, **kwargs):
         req = self.invoke(HttpMethods.POST, Services.RSTS, 'oauth2/token', body=body, *args, **kwargs)
