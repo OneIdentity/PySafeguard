@@ -6,7 +6,7 @@ build-backend = "poetry.core.masonry.api"
 [tool.poetry]
 name = "pysafeguard"
 description = "One Identity Safeguard Python Package"
-version = "0.0.30"
+version = "7.4.0"
 readme = "README.md"
 keywords = ["safeguard","oneidentity"]
 repository = "https://github.com/OneIdentity/PySafeguard"
@@ -14,8 +14,7 @@ authors = [
     "Tania Engel <Tania.Engel@oneidentity.com>",
 ]
 maintainers = [
-    "Rich Gagliano <Rich.Gagliano@oneidentity.com>",
-    "Edward Mun <Edward.Mun@oneidentity.com>",
+    "Stephanie Zinn <Stephanie.Zinn@oneidentity.com>"
 ]
 classifiers = [
     "Programming Language :: Python :: 3",

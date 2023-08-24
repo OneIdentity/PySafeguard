@@ -17,7 +17,7 @@ user = {
     'PrimaryAuthenticationProvider': { 'Id': -1 },
     'Name': 'MyNewUser'
 }
-password = 'MyNewUser123'
+newuserpassword = 'MyNewUser123'
 
 print('Connecting to Safeguard')
 connection = PySafeguardConnection(hostName, caFile)
@@ -32,7 +32,7 @@ result = connection.invoke(HttpMethods.POST, Services.CORE, 'Users', body=user).
 userId = result.get('Id')
 
 print('Creating password for user')
-connection.invoke(HttpMethods.PUT, Services.CORE, f'Users/{userId}/Password', body=password)
+connection.invoke(HttpMethods.PUT, Services.CORE, f'Users/{userId}/Password', body=newuserpassword)
 
 print('Getting newly created user')
 result = connection.invoke(HttpMethods.GET, Services.CORE, f'Users/{userId}')
