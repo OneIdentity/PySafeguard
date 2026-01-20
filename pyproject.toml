@@ -1,35 +1,52 @@
 [build-system]
-#https://python-poetry.org/docs/pyproject
-requires = ["poetry-core>=1.0.0"]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
 
-[tool.poetry]
+[project]
 name = "pysafeguard"
 description = "One Identity Safeguard Python Package"
 version = "7.4.0"
-readme = "README.md"
-keywords = ["safeguard","oneidentity"]
+readme = { file = "README.md", content-type = "text/markdown" }
+keywords = ["safeguard", "oneidentity"]
+license = "Apache"
 repository = "https://github.com/OneIdentity/PySafeguard"
 authors = [
-    "Tania Engel <Tania.Engel@oneidentity.com>",
+    { name = "Tania Engel", email = "Tania.Engel@oneidentity.com" }
 ]
 maintainers = [
-    "Stephanie Zinn <Stephanie.Zinn@oneidentity.com>"
+    { name = "Stephanie Zinn", email = "Stephanie.Zinn@oneidentity.com" }
 ]
+requires-python = ">=3.10"
 classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3 :: Only",
     "Operating System :: OS Independent",
 ]
+dependencies = [
+    "requests >= 2.32",
+    "truststore >= 0.10",
+    "typing_extensions >= 4.15; python_version < '3.11'",
+]
 
-[tool.poetry.urls]
+[project.optional-dependencies]
+async = [
+    "aiohttp >= 3.13",
+]
+signalr = [
+    "signalrcore >= 0.9",
+]
+dev = [
+    "types-requests >= 2.32",
+    "mypy >= 1.19",
+    "ruff >= 0.14",
+]
+
+[project.urls]
 "Bug Tracker" = "https://github.com/OneIdentity/PySafeguard/issues"
-
-[tool.poetry.dependencies]
-python = "^3.7"
-requests = "^2.28.1"
-#signalrcore is optional because it is only imported for SignalR functionality
-signalrcore = { version="^0.9.5", optional = true }
-
-[tool.poetry.extras]
-signalr = ["signalrcore"]
