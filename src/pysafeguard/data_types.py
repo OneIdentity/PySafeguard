@@ -1,9 +1,6 @@
 import enum
 import sys
 
-JsonType = None | bool | int | float | str | dict[str, "JsonType"] | list["JsonType"]
-
-
 if sys.version_info < (3, 11):
 
     class StrEnum(str, enum.Enum):
