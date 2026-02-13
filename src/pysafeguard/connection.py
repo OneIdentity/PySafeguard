@@ -5,8 +5,8 @@ from collections.abc import Mapping
 from requests import Response, request
 from requests.structures import CaseInsensitiveDict
 
-from .data_types import A2ATypes, HttpMethods, JsonType, Services, SshKeyFormats
-from .utility import LiteralString, assemble_path, assemble_url
+from .data_types import A2ATypes, HttpMethods, Services, SshKeyFormats
+from .utility import JsonType, LiteralString, assemble_path, assemble_url, get_access_token, get_user_token
 
 
 class WebRequestError(Exception):
@@ -47,8 +47,6 @@ class Connection:
         updated_headers = CaseInsensitiveDict(headers)
         if body and httpMethod in [HttpMethods.POST, HttpMethods.PUT] and not headers.get("content-type"):
             data_body = None
-            if not isinstance(body, dict):
-                raise TypeError("expected: body as a JSON object")
             json_body = body
             updated_headers["content-type"] = "application/json"
         else:
@@ -125,20 +123,12 @@ class Connection:
         return typing.cast(str, matches[0]["RstsProviderId"])
 
     def __connect(self, body: JsonType, cert: tuple[str, str] | None = None) -> None:
-        data: JsonType
         resp = self.invoke(HttpMethods.POST, Services.RSTS, "oauth2/token", body=body, cert=cert)
         if resp.status_code == 200 and "application/json" in resp.headers.get("content-type", ""):
-            data = resp.json()
-            if not isinstance(data, dict):
-                raise TypeError("expected: JSON object with field `access_token`")
-            access_token = data.get("access_token")
-
+            access_token = get_access_token(resp.json())
             resp = self.invoke(HttpMethods.POST, Services.CORE, "Token/LoginResponse", body=dict(StsAccessToken=access_token))
             if resp.status_code == 200 and "application/json" in resp.headers.get("content-type", ""):
-                data = resp.json()
-                if not isinstance(data, dict):
-                    raise TypeError("expected: JSON object with field `UserToken`")
-                user_token = typing.cast(str, data.get("UserToken"))
+                user_token = get_user_token(resp.json())
                 self.connect_token(user_token)
             else:
                 raise WebRequestError(resp)
