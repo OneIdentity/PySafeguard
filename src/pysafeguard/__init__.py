@@ -8,6 +8,9 @@ from .data_types import HttpMethods as HttpMethods
 from .data_types import Services
 from .data_types import SshKeyFormats as SshKeyFormats
 from .exceptions import SafeguardException as SafeguardException
+from .pkce import connect_pkce as connect_pkce
+from .pkce import get_pkce_token as get_pkce_token
+from .hidden_string import HiddenString as HiddenString
 from .utility import assemble_path, assemble_url
 
 
@@ -69,3 +72,99 @@ class PySafeguardConnection(Connection):
 
         options = options = {"access_token_factory": _token_factory_certificate}
         PySafeguardConnection.__register_signalr(conn.host, callback, options, bool(conn.req_globals.get("verify", True)))
+
+
+# ---------------------------------------------------------------------------
+# Convenience factory functions
+# ---------------------------------------------------------------------------
+
+
+def connect_password(appliance, username, password, provider="local", verify=True, api_version="v4"):
+    """Create an authenticated connection using username and password.
+
+    :param appliance: Network address of the Safeguard appliance.
+    :param username: Username for authentication.
+    :param password: Password for authentication.
+    :param provider: Authentication provider ID (default ``"local"``).
+    :param verify: CA certificate path or ``False`` to disable TLS verification.
+    :param api_version: API version (default ``"v4"``).
+    :returns: An authenticated :class:`PySafeguardConnection`.
+
+    .. note::
+        Resource Owner Grant (ROG) is disabled by default on newer appliances.
+        Use :func:`connect_pkce` instead if you receive a 400 error.
+    """
+    conn = PySafeguardConnection(appliance, verify, api_version)
+    conn.connect_password(username, password, provider)
+    return conn
+
+
+def connect_certificate(appliance, cert_file, key_file, provider="certificate", verify=True, api_version="v4"):
+    """Create an authenticated connection using a client certificate.
+
+    :param appliance: Network address of the Safeguard appliance.
+    :param cert_file: Path to the client certificate (PEM).
+    :param key_file: Path to the certificate key.
+    :param provider: Authentication provider ID (default ``"certificate"``).
+    :param verify: CA certificate path or ``False`` to disable TLS verification.
+    :param api_version: API version (default ``"v4"``).
+    :returns: An authenticated :class:`PySafeguardConnection`.
+    """
+    conn = PySafeguardConnection(appliance, verify, api_version)
+    conn.connect_certificate(cert_file, key_file, provider)
+    return conn
+
+
+def connect_token(appliance, token, verify=True, api_version="v4"):
+    """Create a connection using an existing Safeguard API token.
+
+    :param appliance: Network address of the Safeguard appliance.
+    :param token: An existing Safeguard user token.
+    :param verify: CA certificate path or ``False`` to disable TLS verification.
+    :param api_version: API version (default ``"v4"``).
+    :returns: An authenticated :class:`PySafeguardConnection`.
+    """
+    conn = PySafeguardConnection(appliance, verify, api_version)
+    conn.connect_token(token)
+    return conn
+
+
+def connect_anonymous(appliance, verify=True, api_version="v4"):
+    """Create an unauthenticated connection for anonymous API access.
+
+    Only endpoints that do not require authentication (e.g. Notification/Status)
+    are accessible with this connection.
+
+    :param appliance: Network address of the Safeguard appliance.
+    :param verify: CA certificate path or ``False`` to disable TLS verification.
+    :param api_version: API version (default ``"v4"``).
+    :returns: An unauthenticated :class:`PySafeguardConnection`.
+    """
+    return PySafeguardConnection(appliance, verify, api_version)
+
+
+def connect_persistent(appliance, provider, username, password, secondary_password=None, verify=True, api_version="v4"):
+    """Create a persistent PKCE connection that auto-refreshes its token.
+
+    Combines :func:`connect_pkce` with automatic token refresh: before each
+    API call the token lifetime is checked, and if expired a new token is
+    obtained transparently.
+
+    :param appliance: Network address of the Safeguard appliance.
+    :param provider: Authentication provider name (e.g. ``"local"``).
+    :param username: Username for authentication.
+    :param password: Password for authentication.
+    :param secondary_password: One-time password for MFA, or ``None``.
+    :param verify: CA certificate path or ``False`` to disable TLS verification.
+    :param api_version: API version (default ``"v4"``).
+    :returns: An authenticated :class:`Connection` with auto-refresh enabled.
+
+    .. note::
+        PKCE connections that require MFA cannot be auto-refreshed because
+        one-time passwords are not reusable. The initial connection will
+        succeed, but :meth:`~Connection.refresh_access_token` will raise
+        :class:`SafeguardException` when the token eventually expires.
+    """
+    conn = connect_pkce(appliance, provider, username, password, secondary_password, verify, api_version)
+    conn._auto_refresh = True
+    return conn

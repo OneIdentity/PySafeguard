@@ -22,6 +22,8 @@ PySafeguard/
 |   |-- async_connection.py         # Async AsyncConnection class (aiohttp-based)
 |   |-- data_types.py               # Enums: Services, HttpMethods, A2ATypes, SshKeyFormats
 |   |-- exceptions.py               # SafeguardException base, WebRequestError, AsyncWebRequestError
+|   |-- pkce.py                     # PKCE non-interactive login (rSTS multi-step flow)
+|   |-- hidden_string.py             # HiddenString wrapper for sensitive values
 |   |-- utility.py                  # URL assembly, token extraction helpers
 |   `-- py.typed                    # PEP 561 marker for typed package
 |
@@ -168,6 +170,76 @@ The default API version is **v4**.
 header (`Authorization: A2A <apiKey>`) to retrieve credentials without going
 through the standard user token flow. Supports password, private key, and API
 key secret retrieval.
+
+### PKCE non-interactive login
+
+`pkce.py` implements the full rSTS PKCE authentication flow without a browser.
+This is the **recommended** authentication method on newer appliances where
+Resource Owner Grant (ROG) is disabled by default.
+
+The flow drives the rSTS login controller through multiple steps:
+1. **Step 1 (Init)**: Provider initialization with CSRF token
+2. **Step 3 (PrimaryAuth)**: Username/password submission
+3. **Step 7 (SecondaryInit)** + **Step 5 (SecondaryAuth)**: MFA if required
+4. **Step 6 (GenerateClaims)**: Authorization code extraction
+5. **Token exchange**: Authorization code → rSTS token → Safeguard user token
+
+Key implementation details:
+- CSRF token: 32 random bytes → base64url, set as cookie on `/RSTS` path
+- Code verifier: 60 random bytes → base64url
+- Code challenge: SHA256(ASCII(verifier)) → base64url
+- Base64url: standard base64 with `+`→`-`, `/`→`_`, padding stripped
+- Provider resolution: 3-level match (exact RstsProviderId → exact Name → substring)
+- 203 from rSTS = challenge/error (handled per-step, not globally)
+- JSON responses parsed opportunistically (non-JSON means no secondary auth)
+
+### Connect factory functions
+
+Module-level convenience functions in `__init__.py` for creating connections:
+- `connect_pkce(appliance, provider, username, password, ...)` — PKCE flow (recommended)
+- `connect_persistent(appliance, provider, username, password, ...)` — PKCE with auto-refresh
+- `connect_password(appliance, username, password, ...)` — ROG password auth
+- `connect_certificate(appliance, cert_file, key_file, ...)` — client certificate
+- `connect_token(appliance, token, ...)` — existing Safeguard API token
+- `connect_anonymous(appliance, ...)` — unauthenticated access
+
+All return a `PySafeguardConnection` (or `Connection` for `connect_pkce`/`connect_persistent`).
+
+### Token refresh and lifecycle
+
+- **Credential storage**: `connect_password()`, `connect_certificate()`, and
+  `connect_pkce()` store authentication credentials internally (in frozen
+  dataclasses with `eq=False`) so that tokens can be refreshed. Sensitive fields
+  (passwords, TOTP codes) are wrapped in `HiddenString` (see below).
+- **`_replace_auth_credential()`** swaps credentials and disposes secrets from
+  the previous credential via `HiddenString.dispose()`.
+- **`_set_user_token()`** is the internal token setter that preserves refresh
+  credentials. The public `connect_token()` clears them (bare tokens can't refresh).
+- **`refresh_access_token()`** re-authenticates using stored credentials. Raises
+  `SafeguardException` if no credentials are available (e.g. `connect_token()`).
+  PKCE connections requiring MFA cannot be refreshed (one-time passwords).
+- **`logout()`** POSTs to `Token/Logout` (best-effort), then clears the local
+  token. Does **not** dispose credentials (so `refresh_access_token()` still works).
+- **Auto-refresh**: When `_auto_refresh` is `True`, `invoke()` checks
+  `get_remaining_token_lifetime()` before each API call (excluding RSTS and
+  APPLIANCE service calls to avoid recursion) and refreshes if expired.
+  `connect_persistent()` enables this flag.
+
+### HiddenString
+
+`HiddenString` (in `hidden_string.py`) is a best-effort wrapper for sensitive
+values, inspired by .NET's `SecureString`. It provides:
+
+- **`bytearray` storage** — mutable, so memory can be explicitly zeroed
+- **`dispose()`** — zeros the buffer and marks the string as disposed
+- **`get_value()`** — explicit access with `RuntimeError` after disposal
+- **`repr()`/`str()` protection** — always returns `***`
+- **Serialization blocking** — `__reduce_ex__`, `__copy__`, `__deepcopy__` all raise `TypeError`
+
+**Limitations** (documented in module docstring): Python cannot encrypt memory or
+guarantee transient copies are scrubbed. The original `str` argument, `get_value()`
+return values, and HTTP library copies exist briefly in memory. This minimizes
+the window and surface area of exposure, not eliminates it.
 
 ### SignalR event listeners
 

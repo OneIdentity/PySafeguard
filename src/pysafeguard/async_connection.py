@@ -2,6 +2,7 @@ import json
 import ssl
 import typing
 from collections.abc import Mapping
+from dataclasses import dataclass, field
 
 from aiohttp import ClientResponse, ClientSession, ClientTimeout
 from multidict import CIMultiDict
@@ -9,9 +10,36 @@ from truststore import SSLContext
 
 from .data_types import A2ATypes, HttpMethods, Services, SshKeyFormats
 from .exceptions import SafeguardException
+from .hidden_string import HiddenString
 from .utility import JsonType, LiteralString, assemble_path, assemble_url, get_access_token, get_user_token
 
 DEFAULT_TIMEOUT = 300
+
+
+# ---------------------------------------------------------------------------
+# Auth credential storage (internal, async variants)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, eq=False)
+class _AsyncPasswordCredential:
+    username: str
+    password: HiddenString = field(repr=False)
+    provider: str
+
+    def dispose(self) -> None:
+        """Dispose sensitive fields."""
+        self.password.dispose()
+
+
+@dataclass(frozen=True, eq=False)
+class _AsyncCertificateCredential:
+    cert_file: str
+    key_file: str
+    provider: str
+
+
+_AsyncAuthCredential = _AsyncPasswordCredential | _AsyncCertificateCredential
 
 
 class AsyncWebRequestError(SafeguardException):
@@ -24,12 +52,6 @@ class AsyncWebRequestError(SafeguardException):
 
 
 class AsyncConnection:
-    host: str | None
-    UserToken: str | None
-    apiVersion: str
-    verify: bool | str
-    headers: CIMultiDict[str]
-
     def __init__(self, host: str | None, verify: bool | str = True, apiVersion: LiteralString = "v4", *, timeout: int = DEFAULT_TIMEOUT) -> None:
         """
         Initialize an async Safeguard connection object.
@@ -41,12 +63,14 @@ class AsyncConnection:
         """
 
         self.host = host
-        self.UserToken = None
+        self.UserToken: str | None = None
         self.apiVersion = apiVersion
         self.verify = verify
         self.headers = CIMultiDict({"accept": "application/json"})
         self._timeout = ClientTimeout(total=timeout)
         self._session: ClientSession | None = None
+        self._auth_credential: _AsyncAuthCredential | None = None
+        self._auto_refresh = False
 
     def _create_ssl_context(self, cert: tuple[str, str] | None = None) -> ssl.SSLContext | bool:
         """Build an SSL context based on verification and client certificate settings."""
@@ -80,6 +104,21 @@ class AsyncConnection:
 
     async def __aexit__(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: object) -> None:
         await self.close()
+
+    def _set_user_token(self, token: str | None) -> None:
+        """Set the user token and authorization header (internal use only)."""
+        self.UserToken = token
+        if token:
+            self.headers.update(authorization=f"Bearer {token}")
+        else:
+            self.headers.pop("authorization", None)
+
+    def _replace_auth_credential(self, new_credential: _AsyncAuthCredential | None) -> None:
+        """Swap stored auth credentials, disposing secrets from the old one."""
+        old = self._auth_credential
+        self._auth_credential = new_credential
+        if old is not None and hasattr(old, "dispose"):
+            old.dispose()
 
     async def _execute_web_request(
         self, httpMethod: HttpMethods, url: str, body: JsonType | str | None, headers: Mapping[str, str], cert: tuple[str, str] | None = None
@@ -174,7 +213,7 @@ class AsyncConnection:
             resp = await self.invoke(HttpMethods.POST, Services.CORE, "Token/LoginResponse", body=dict(StsAccessToken=access_token))
             if resp.status == 200 and "application/json" in resp.headers.get("content-type", ""):
                 user_token = get_user_token(await resp.json())
-                self.connect_token(user_token)
+                self._set_user_token(user_token)
             else:
                 raise AsyncWebRequestError(resp)
         else:
@@ -196,6 +235,7 @@ class AsyncConnection:
             "password": password,
         }
         await self._connect(body)
+        self._replace_auth_credential(_AsyncPasswordCredential(username, HiddenString(password), provider))
 
     async def connect_certificate(self, certFile: str, keyFile: str, provider: str = "certificate") -> None:
         """
@@ -211,16 +251,18 @@ class AsyncConnection:
             "grant_type": "client_credentials",
         }
         await self._connect(body, cert=(certFile, keyFile))
+        self._replace_auth_credential(_AsyncCertificateCredential(certFile, keyFile, provider))
 
     def connect_token(self, token: str | None) -> None:
         """
-        Use an existing token.
+        Use an existing token. Clears any stored refresh credentials since
+        a bare token cannot be refreshed.
 
         :param token: The user token.
         """
 
-        self.UserToken = token
-        self.headers.update(authorization="Bearer {}".format(self.UserToken))
+        self._replace_auth_credential(None)
+        self._set_user_token(token)
 
     async def invoke(
         self,
@@ -249,6 +291,9 @@ class AsyncConnection:
         :returns: Request `Response` object.
         """
 
+        if self._auto_refresh and httpService not in (Services.RSTS, Services.APPLIANCE):
+            await self._check_and_refresh_token()
+
         url = assemble_url(
             host or self.host or "",
             assemble_path(
@@ -261,6 +306,52 @@ class AsyncConnection:
         headers = CIMultiDict(self.headers)
         headers.update(additionalHeaders)
         return await self._execute_web_request(httpMethod, url, body, headers, cert=cert)
+
+    async def _check_and_refresh_token(self) -> None:
+        """Check token lifetime and refresh if expired. Used by auto-refresh."""
+        try:
+            remaining = await self.get_remaining_token_lifetime()
+            if remaining is None or remaining <= 0:
+                await self.refresh_access_token()
+        except SafeguardException:
+            await self.refresh_access_token()
+
+    async def refresh_access_token(self) -> None:
+        """Re-authenticate using the stored credentials to obtain a fresh token.
+
+        :raises SafeguardException: If no refresh credentials are stored or
+            if re-authentication fails.
+        """
+        cred = self._auth_credential
+        if cred is None:
+            raise SafeguardException(
+                "No authentication credentials available for token refresh. Only password and certificate connections support async refresh."
+            )
+
+        if isinstance(cred, _AsyncPasswordCredential):
+            body: JsonType = {
+                "scope": f"rsts:sts:primaryproviderid:{cred.provider}",
+                "grant_type": "password",
+                "username": cred.username,
+                "password": cred.password.get_value(),
+            }
+            await self._connect(body)
+        elif isinstance(cred, _AsyncCertificateCredential):
+            body = {
+                "scope": f"rsts:sts:primaryproviderid:{cred.provider}",
+                "grant_type": "client_credentials",
+            }
+            await self._connect(body, cert=(cred.cert_file, cred.key_file))
+
+    async def logout(self) -> None:
+        """Log out of the Safeguard appliance, invalidating the current token."""
+        if self.UserToken is None:
+            return
+        try:
+            await self.invoke(HttpMethods.POST, Services.CORE, "Token/Logout")
+        except Exception:
+            pass  # Best-effort
+        self._set_user_token(None)
 
     async def get_remaining_token_lifetime(self) -> int | None:
         """
