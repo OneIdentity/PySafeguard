@@ -3,19 +3,24 @@ import ssl
 import typing
 from collections.abc import Mapping
 
-from aiohttp import ClientResponse, ClientSession
+from aiohttp import ClientResponse, ClientSession, ClientTimeout
 from multidict import CIMultiDict
 from truststore import SSLContext
 
 from .data_types import A2ATypes, HttpMethods, Services, SshKeyFormats
+from .exceptions import SafeguardException
 from .utility import JsonType, LiteralString, assemble_path, assemble_url, get_access_token, get_user_token
 
+DEFAULT_TIMEOUT = 300
 
-class AsyncWebRequestError(Exception):
+
+class AsyncWebRequestError(SafeguardException):
+    """Exception raised for failed async HTTP responses from the Safeguard API."""
+
     def __init__(self, resp: ClientResponse) -> None:
         self.req = resp
         self.message = f"{resp.status} {resp.reason}: {resp.method} {resp.url}"
-        super().__init__(self.message)
+        super().__init__(self.message, status_code=resp.status)
 
 
 class AsyncConnection:
@@ -25,13 +30,14 @@ class AsyncConnection:
     verify: bool | str
     headers: CIMultiDict[str]
 
-    def __init__(self, host: str | None, verify: bool | str = True, apiVersion: LiteralString = "v4") -> None:
+    def __init__(self, host: str | None, verify: bool | str = True, apiVersion: LiteralString = "v4", *, timeout: int = DEFAULT_TIMEOUT) -> None:
         """
-        Initialize a Safeguard connection object
+        Initialize an async Safeguard connection object.
 
         :param host: The appliance hostname.
-        :param verify: A path to a file with CA certificate information or `False` to disable verification.
+        :param verify: A path to a file with CA certificate information or ``False`` to disable verification.
         :param apiVersion: The version of the API with which to connect.
+        :param timeout: Request timeout in seconds. Defaults to 300.
         """
 
         self.host = host
@@ -39,15 +45,49 @@ class AsyncConnection:
         self.apiVersion = apiVersion
         self.verify = verify
         self.headers = CIMultiDict({"accept": "application/json"})
+        self._timeout = ClientTimeout(total=timeout)
+        self._session: ClientSession | None = None
 
-    @staticmethod
-    async def __execute_web_request(
-        httpMethod: HttpMethods, url: str, body: JsonType | str | None, headers: Mapping[str, str], verify: str | bool, cert: tuple[str, str] | None
+    def _create_ssl_context(self, cert: tuple[str, str] | None = None) -> ssl.SSLContext | bool:
+        """Build an SSL context based on verification and client certificate settings."""
+        if self.verify is False and cert is None:
+            return False
+
+        ctx = SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        if isinstance(self.verify, str):
+            ctx.load_verify_locations(self.verify)
+        elif self.verify is False:
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+        if cert is not None:
+            ctx.load_cert_chain(cert[0], cert[1])
+        return ctx
+
+    async def _get_session(self) -> ClientSession:
+        """Return the persistent session, creating it lazily if needed."""
+        if self._session is None or self._session.closed:
+            self._session = ClientSession()
+        return self._session
+
+    async def close(self) -> None:
+        """Close the underlying HTTP session and release resources."""
+        if self._session is not None and not self._session.closed:
+            await self._session.close()
+            self._session = None
+
+    async def __aenter__(self) -> "AsyncConnection":
+        return self
+
+    async def __aexit__(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: object) -> None:
+        await self.close()
+
+    async def _execute_web_request(
+        self, httpMethod: HttpMethods, url: str, body: JsonType | str | None, headers: Mapping[str, str], cert: tuple[str, str] | None = None
     ) -> ClientResponse:
         data_body: str | None
         json_body: JsonType | None
         updated_headers = CIMultiDict(headers)
-        if body and httpMethod in [HttpMethods.POST, HttpMethods.PUT] and not headers.get("content-type"):
+        if body and httpMethod in (HttpMethods.POST, HttpMethods.PUT) and not headers.get("content-type"):
             data_body = None
             json_body = body
             updated_headers["content-type"] = "application/json"
@@ -57,17 +97,11 @@ class AsyncConnection:
             data_body = body
             json_body = None
 
-        ctx = SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-        if cert is not None:
-            certfile, keyfile = cert
-            ctx.load_cert_chain(certfile, keyfile)
-        elif isinstance(verify, str):
-            ctx.load_cert_chain(verify)
-
-        async with ClientSession() as session:
-            async with session.request(httpMethod, url, headers=updated_headers, ssl=ctx, data=data_body, json=json_body) as resp:
-                await resp.read()
-                return resp
+        ssl_context = self._create_ssl_context(cert)
+        session = await self._get_session()
+        resp = await session.request(httpMethod, url, headers=updated_headers, ssl=ssl_context, data=data_body, json=json_body, timeout=self._timeout)
+        await resp.read()
+        return resp
 
     @classmethod
     async def a2a_get_credential(
@@ -95,27 +129,27 @@ class AsyncConnection:
         """
 
         if not apiKey:
-            raise Exception("apiKey may not be null or empty")
+            raise ValueError("apiKey may not be null or empty")
 
         if not cert and not key:
-            raise Exception("cert path and key path may not be null or empty")
+            raise ValueError("cert path and key path may not be null or empty")
 
-        headers = CIMultiDict({"authorization": f"A2A {apiKey}"})
-        query: dict[str, str] = {"type": a2aType}
-        if a2aType == A2ATypes.PRIVATEKEY:
-            query["keyFormat"] = keyFormat
+        async with cls(host, verify=verify, apiVersion=apiVersion) as conn:
+            query: dict[str, str] = {"type": a2aType}
+            if a2aType == A2ATypes.PRIVATEKEY:
+                query["keyFormat"] = keyFormat
 
-        resp = await cls.__execute_web_request(
-            HttpMethods.GET,
-            assemble_url(host, assemble_path(Services.A2A, apiVersion, "Credentials"), query),
-            body=None,
-            headers=headers,
-            verify=verify,
-            cert=(cert, key),
-        )
-        if resp.status != 200:
-            raise AsyncWebRequestError(resp)
-        return typing.cast(JsonType, await resp.json())
+            resp = await conn.invoke(
+                HttpMethods.GET,
+                Services.A2A,
+                "Credentials",
+                query=query,
+                additionalHeaders={"authorization": f"A2A {apiKey}"},
+                cert=(cert, key),
+            )
+            if resp.status != 200:
+                raise AsyncWebRequestError(resp)
+            return typing.cast(JsonType, await resp.json())
 
     async def get_provider_id(self, name: str) -> str:
         """
@@ -129,11 +163,11 @@ class AsyncConnection:
         providers = await resp.json()
         matches = [provider for provider in providers if name.upper() == typing.cast(str, provider["Name"]).upper()]
         if not matches:
-            raise Exception("Unable to find Provider with Name {} in\n{}".format(name, json.dumps(providers, indent=2, sort_keys=True)))
+            raise SafeguardException("Unable to find Provider with Name {} in\n{}".format(name, json.dumps(providers, indent=2, sort_keys=True)))
 
         return typing.cast(str, matches[0]["RstsProviderId"])
 
-    async def __connect(self, body: JsonType, cert: tuple[str, str] | None = None) -> None:
+    async def _connect(self, body: JsonType, cert: tuple[str, str] | None = None) -> None:
         resp = await self.invoke(HttpMethods.POST, Services.RSTS, "oauth2/token", body=body, cert=cert)
         if resp.status == 200 and "application/json" in resp.headers.get("content-type", ""):
             access_token = get_access_token(await resp.json())
@@ -161,7 +195,7 @@ class AsyncConnection:
             "username": username,
             "password": password,
         }
-        await self.__connect(body)
+        await self._connect(body)
 
     async def connect_certificate(self, certFile: str, keyFile: str, provider: str = "certificate") -> None:
         """
@@ -176,7 +210,7 @@ class AsyncConnection:
             "scope": f"rsts:sts:primaryproviderid:{provider}",
             "grant_type": "client_credentials",
         }
-        await self.__connect(body, cert=(certFile, keyFile))
+        await self._connect(body, cert=(certFile, keyFile))
 
     def connect_token(self, token: str | None) -> None:
         """
@@ -226,7 +260,7 @@ class AsyncConnection:
         )
         headers = CIMultiDict(self.headers)
         headers.update(additionalHeaders)
-        return await self.__execute_web_request(httpMethod, url, body, headers, verify=self.verify, cert=cert)
+        return await self._execute_web_request(httpMethod, url, body, headers, cert=cert)
 
     async def get_remaining_token_lifetime(self) -> int | None:
         """

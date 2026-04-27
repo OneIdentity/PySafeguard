@@ -7,6 +7,7 @@ from .data_types import A2ATypes as A2ATypes
 from .data_types import HttpMethods as HttpMethods
 from .data_types import Services
 from .data_types import SshKeyFormats as SshKeyFormats
+from .exceptions import SafeguardException as SafeguardException
 from .utility import assemble_path, assemble_url
 
 

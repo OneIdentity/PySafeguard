@@ -1,19 +1,25 @@
 import json
 import typing
 from collections.abc import Mapping
+from types import TracebackType
 
-from requests import Response, request
+from requests import Response, Session
 from requests.structures import CaseInsensitiveDict
 
 from .data_types import A2ATypes, HttpMethods, Services, SshKeyFormats
+from .exceptions import SafeguardException
 from .utility import JsonType, LiteralString, assemble_path, assemble_url, get_access_token, get_user_token
 
+DEFAULT_TIMEOUT = 300
 
-class WebRequestError(Exception):
+
+class WebRequestError(SafeguardException):
+    """Exception raised for failed HTTP responses from the Safeguard API."""
+
     def __init__(self, resp: Response) -> None:
         self.req = resp
         self.message = f"{resp.status_code} {resp.reason}: {resp.request.method} {resp.url}\n{resp.text}"
-        super().__init__(self.message)
+        super().__init__(self.message, status_code=resp.status_code, response=resp.text)
 
 
 class Connection:
@@ -23,13 +29,14 @@ class Connection:
     verify: bool | str
     headers: CaseInsensitiveDict[str]
 
-    def __init__(self, host: str | None, verify: bool | str = True, apiVersion: LiteralString = "v4") -> None:
+    def __init__(self, host: str | None, verify: bool | str = True, apiVersion: LiteralString = "v4", *, timeout: int = DEFAULT_TIMEOUT) -> None:
         """
-        Initialize a Safeguard connection object
+        Initialize a Safeguard connection object.
 
         :param host: The appliance hostname.
-        :param verify: A path to a file with CA certificate information or `False` to disable verification.
+        :param verify: A path to a file with CA certificate information or ``False`` to disable verification.
         :param apiVersion: The version of the API with which to connect.
+        :param timeout: Request timeout in seconds. Defaults to 300.
         """
 
         self.host = host
@@ -37,15 +44,27 @@ class Connection:
         self.apiVersion = apiVersion
         self.verify = verify
         self.headers = CaseInsensitiveDict({"accept": "application/json"})
+        self._timeout = timeout
+        self._session = Session()
+        self._session.verify = verify
 
-    @staticmethod
-    def __execute_web_request(
-        httpMethod: HttpMethods, url: str, body: JsonType | str | None, headers: Mapping[str, str], verify: str | bool, cert: tuple[str, str] | None
+    def close(self) -> None:
+        """Close the underlying HTTP session and release resources."""
+        self._session.close()
+
+    def __enter__(self) -> "Connection":
+        return self
+
+    def __exit__(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: TracebackType | None) -> None:
+        self.close()
+
+    def _execute_web_request(
+        self, httpMethod: HttpMethods, url: str, body: JsonType | str | None, headers: Mapping[str, str], cert: tuple[str, str] | None = None
     ) -> Response:
         data_body: str | None
         json_body: JsonType | None
         updated_headers = CaseInsensitiveDict(headers)
-        if body and httpMethod in [HttpMethods.POST, HttpMethods.PUT] and not headers.get("content-type"):
+        if body and httpMethod in (HttpMethods.POST, HttpMethods.PUT) and not headers.get("content-type"):
             data_body = None
             json_body = body
             updated_headers["content-type"] = "application/json"
@@ -55,8 +74,7 @@ class Connection:
             data_body = body
             json_body = None
 
-        with request(httpMethod, url, headers=updated_headers, cert=cert, verify=verify, data=data_body, json=json_body) as resp:
-            return resp
+        return self._session.request(httpMethod, url, headers=dict(updated_headers), cert=cert, data=data_body, json=json_body, timeout=self._timeout)
 
     @classmethod
     def a2a_get_credential(
@@ -84,27 +102,27 @@ class Connection:
         """
 
         if not apiKey:
-            raise Exception("apiKey may not be null or empty")
+            raise ValueError("apiKey may not be null or empty")
 
         if not cert and not key:
-            raise Exception("cert path and key path may not be null or empty")
+            raise ValueError("cert path and key path may not be null or empty")
 
-        headers = CaseInsensitiveDict({"authorization": f"A2A {apiKey}"})
-        query: dict[str, str] = {"type": a2aType}
-        if a2aType == A2ATypes.PRIVATEKEY:
-            query["keyFormat"] = keyFormat
+        with cls(host, verify=verify, apiVersion=apiVersion) as conn:
+            query: dict[str, str] = {"type": a2aType}
+            if a2aType == A2ATypes.PRIVATEKEY:
+                query["keyFormat"] = keyFormat
 
-        credential = cls.__execute_web_request(
-            HttpMethods.GET,
-            assemble_url(host, assemble_path(Services.A2A, apiVersion, "Credentials"), query),
-            body=None,
-            headers=headers,
-            verify=verify,
-            cert=(cert, key),
-        )
-        if credential.status_code != 200:
-            raise WebRequestError(credential)
-        return typing.cast(JsonType, credential.json())
+            resp = conn.invoke(
+                HttpMethods.GET,
+                Services.A2A,
+                "Credentials",
+                query=query,
+                additionalHeaders={"authorization": f"A2A {apiKey}"},
+                cert=(cert, key),
+            )
+            if resp.status_code != 200:
+                raise WebRequestError(resp)
+            return typing.cast(JsonType, resp.json())
 
     def get_provider_id(self, name: str) -> str:
         """
@@ -118,11 +136,11 @@ class Connection:
         providers = resp.json()
         matches = [provider for provider in providers if name.upper() == typing.cast(str, provider["Name"]).upper()]
         if not matches:
-            raise Exception("Unable to find Provider with Name {} in\n{}".format(name, json.dumps(providers, indent=2, sort_keys=True)))
+            raise SafeguardException("Unable to find Provider with Name {} in\n{}".format(name, json.dumps(providers, indent=2, sort_keys=True)))
 
         return typing.cast(str, matches[0]["RstsProviderId"])
 
-    def __connect(self, body: JsonType, cert: tuple[str, str] | None = None) -> None:
+    def _connect(self, body: JsonType, cert: tuple[str, str] | None = None) -> None:
         resp = self.invoke(HttpMethods.POST, Services.RSTS, "oauth2/token", body=body, cert=cert)
         if resp.status_code == 200 and "application/json" in resp.headers.get("content-type", ""):
             access_token = get_access_token(resp.json())
@@ -150,7 +168,7 @@ class Connection:
             "username": username,
             "password": password,
         }
-        self.__connect(body)
+        self._connect(body)
 
     def connect_certificate(self, certFile: str, keyFile: str, provider: str = "certificate") -> None:
         """
@@ -165,7 +183,7 @@ class Connection:
             "scope": f"rsts:sts:primaryproviderid:{provider}",
             "grant_type": "client_credentials",
         }
-        self.__connect(body, cert=(certFile, keyFile))
+        self._connect(body, cert=(certFile, keyFile))
 
     def connect_token(self, token: str | None) -> None:
         """
@@ -215,7 +233,7 @@ class Connection:
         )
         headers = CaseInsensitiveDict(self.headers)
         headers.update(additionalHeaders)
-        return self.__execute_web_request(httpMethod, url, body, headers, verify=self.verify, cert=cert)
+        return self._execute_web_request(httpMethod, url, body, headers, cert=cert)
 
     def get_remaining_token_lifetime(self) -> int | None:
         """
