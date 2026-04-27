@@ -46,7 +46,16 @@ dev = [
     "types-requests >= 2.32",
     "mypy >= 1.19",
     "ruff >= 0.14",
+    "pytest >= 8.0",
+    "pytest-asyncio >= 0.25",
 ]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = [
+    "integration: tests that require a live Safeguard appliance (set SPP_HOST env var)",
+]
+testpaths = ["tests"]
 
 [project.urls]
 "Bug Tracker" = "https://github.com/OneIdentity/PySafeguard/issues"
