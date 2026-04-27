@@ -17,13 +17,14 @@ flows, and architecture patterns that should be mirrored in Python.
 ```
 PySafeguard/
 |-- src/pysafeguard/                # SDK package
-|   |-- __init__.py                 # Public API: PySafeguardConnection, SignalR helpers
+|   |-- __init__.py                 # Public API: PySafeguardConnection, factory functions, SignalR helpers
 |   |-- connection.py               # Sync Connection class (requests-based)
 |   |-- async_connection.py         # Async AsyncConnection class (aiohttp-based)
 |   |-- data_types.py               # Enums: Services, HttpMethods, A2ATypes, SshKeyFormats
 |   |-- exceptions.py               # SafeguardException base, WebRequestError, AsyncWebRequestError
-|   |-- pkce.py                     # PKCE non-interactive login (rSTS multi-step flow)
-|   |-- hidden_string.py             # HiddenString wrapper for sensitive values
+|   |-- hidden_string.py            # HiddenString wrapper for sensitive values
+|   |-- pkce.py                     # Sync PKCE non-interactive login (rSTS multi-step flow)
+|   |-- async_pkce.py               # Async PKCE non-interactive login (aiohttp-based)
 |   |-- utility.py                  # URL assembly, token extraction helpers
 |   `-- py.typed                    # PEP 561 marker for typed package
 |
@@ -196,6 +197,8 @@ Key implementation details:
 ### Connect factory functions
 
 Module-level convenience functions in `__init__.py` for creating connections:
+
+**Sync** (return `PySafeguardConnection` or `Connection`):
 - `connect_pkce(appliance, provider, username, password, ...)` — PKCE flow (recommended)
 - `connect_persistent(appliance, provider, username, password, ...)` — PKCE with auto-refresh
 - `connect_password(appliance, username, password, ...)` — ROG password auth
@@ -203,7 +206,13 @@ Module-level convenience functions in `__init__.py` for creating connections:
 - `connect_token(appliance, token, ...)` — existing Safeguard API token
 - `connect_anonymous(appliance, ...)` — unauthenticated access
 
-All return a `PySafeguardConnection` (or `Connection` for `connect_pkce`/`connect_persistent`).
+**Async** (return `AsyncConnection`):
+- `async_connect_pkce(...)` — async PKCE flow
+- `async_connect_persistent(...)` — async PKCE with auto-refresh
+- `async_connect_password(...)` — async ROG password auth
+- `async_connect_certificate(...)` — async client certificate
+- `async_connect_token(...)` — existing token (sync, returns `AsyncConnection`)
+- `async_connect_anonymous(...)` — unauthenticated (sync, returns `AsyncConnection`)
 
 ### Token refresh and lifecycle
 

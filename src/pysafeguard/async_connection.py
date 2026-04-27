@@ -39,7 +39,21 @@ class _AsyncCertificateCredential:
     provider: str
 
 
-_AsyncAuthCredential = _AsyncPasswordCredential | _AsyncCertificateCredential
+@dataclass(frozen=True, eq=False)
+class _AsyncPkceCredential:
+    provider: str
+    username: str
+    password: HiddenString = field(repr=False)
+    secondary_password: HiddenString | None = field(repr=False, default=None)
+
+    def dispose(self) -> None:
+        """Dispose sensitive fields."""
+        self.password.dispose()
+        if self.secondary_password is not None:
+            self.secondary_password.dispose()
+
+
+_AsyncAuthCredential = _AsyncPasswordCredential | _AsyncCertificateCredential | _AsyncPkceCredential
 
 
 class AsyncWebRequestError(SafeguardException):
@@ -170,7 +184,7 @@ class AsyncConnection:
         if not apiKey:
             raise ValueError("apiKey may not be null or empty")
 
-        if not cert and not key:
+        if not cert or not key:
             raise ValueError("cert path and key path may not be null or empty")
 
         async with cls(host, verify=verify, apiVersion=apiVersion) as conn:
@@ -325,7 +339,7 @@ class AsyncConnection:
         cred = self._auth_credential
         if cred is None:
             raise SafeguardException(
-                "No authentication credentials available for token refresh. Only password and certificate connections support async refresh."
+                "No authentication credentials available for token refresh. Only password, certificate, and PKCE (without MFA) connections support refresh."
             )
 
         if isinstance(cred, _AsyncPasswordCredential):
@@ -342,6 +356,15 @@ class AsyncConnection:
                 "grant_type": "client_credentials",
             }
             await self._connect(body, cert=(cred.cert_file, cred.key_file))
+        elif isinstance(cred, _AsyncPkceCredential):
+            if cred.secondary_password is not None:
+                raise SafeguardException("Cannot refresh PKCE connection that requires MFA. One-time passwords cannot be reused.")
+            from .async_pkce import async_get_pkce_token
+
+            token = await async_get_pkce_token(
+                self.host or "", cred.provider, cred.username, cred.password.get_value(), verify=self.verify, api_version=self.apiVersion
+            )
+            self._set_user_token(token)
 
     async def logout(self) -> None:
         """Log out of the Safeguard appliance, invalidating the current token."""

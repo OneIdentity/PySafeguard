@@ -1,6 +1,9 @@
 # mypy: ignore-errors
 # type: ignore
 
+from .async_connection import AsyncConnection as AsyncConnection
+from .async_pkce import async_connect_pkce as async_connect_pkce
+from .async_pkce import async_get_pkce_token as async_get_pkce_token
 from .connection import Connection
 from .connection import WebRequestError as WebRequestError
 from .data_types import A2ATypes as A2ATypes
@@ -8,9 +11,9 @@ from .data_types import HttpMethods as HttpMethods
 from .data_types import Services
 from .data_types import SshKeyFormats as SshKeyFormats
 from .exceptions import SafeguardException as SafeguardException
+from .hidden_string import HiddenString as HiddenString
 from .pkce import connect_pkce as connect_pkce
 from .pkce import get_pkce_token as get_pkce_token
-from .hidden_string import HiddenString as HiddenString
 from .utility import assemble_path, assemble_url
 
 
@@ -166,5 +169,88 @@ def connect_persistent(appliance, provider, username, password, secondary_passwo
         :class:`SafeguardException` when the token eventually expires.
     """
     conn = connect_pkce(appliance, provider, username, password, secondary_password, verify, api_version)
+    conn._auto_refresh = True
+    return conn
+
+
+# ---------------------------------------------------------------------------
+# Async convenience factory functions
+# ---------------------------------------------------------------------------
+
+
+async def async_connect_password(appliance, username, password, provider="local", verify=True, api_version="v4"):
+    """Async: Create an authenticated connection using username and password.
+
+    :param appliance: Network address of the Safeguard appliance.
+    :param username: Username for authentication.
+    :param password: Password for authentication.
+    :param provider: Authentication provider ID (default ``"local"``).
+    :param verify: CA certificate path or ``False`` to disable TLS verification.
+    :param api_version: API version (default ``"v4"``).
+    :returns: An authenticated :class:`AsyncConnection`.
+
+    .. note::
+        Resource Owner Grant (ROG) is disabled by default on newer appliances.
+        Use :func:`async_connect_pkce` instead if you receive a 400 error.
+    """
+    conn = AsyncConnection(appliance, verify, api_version)
+    await conn.connect_password(username, password, provider)
+    return conn
+
+
+async def async_connect_certificate(appliance, cert_file, key_file, provider="certificate", verify=True, api_version="v4"):
+    """Async: Create an authenticated connection using a client certificate.
+
+    :param appliance: Network address of the Safeguard appliance.
+    :param cert_file: Path to the client certificate (PEM).
+    :param key_file: Path to the certificate key.
+    :param provider: Authentication provider ID (default ``"certificate"``).
+    :param verify: CA certificate path or ``False`` to disable TLS verification.
+    :param api_version: API version (default ``"v4"``).
+    :returns: An authenticated :class:`AsyncConnection`.
+    """
+    conn = AsyncConnection(appliance, verify, api_version)
+    await conn.connect_certificate(cert_file, key_file, provider)
+    return conn
+
+
+def async_connect_token(appliance, token, verify=True, api_version="v4"):
+    """Async: Create a connection using an existing Safeguard API token.
+
+    :param appliance: Network address of the Safeguard appliance.
+    :param token: An existing Safeguard user token.
+    :param verify: CA certificate path or ``False`` to disable TLS verification.
+    :param api_version: API version (default ``"v4"``).
+    :returns: An authenticated :class:`AsyncConnection`.
+    """
+    conn = AsyncConnection(appliance, verify, api_version)
+    conn.connect_token(token)
+    return conn
+
+
+def async_connect_anonymous(appliance, verify=True, api_version="v4"):
+    """Async: Create an unauthenticated connection for anonymous API access.
+
+    :param appliance: Network address of the Safeguard appliance.
+    :param verify: CA certificate path or ``False`` to disable TLS verification.
+    :param api_version: API version (default ``"v4"``).
+    :returns: An unauthenticated :class:`AsyncConnection`.
+    """
+    return AsyncConnection(appliance, verify, api_version)
+
+
+async def async_connect_persistent(appliance, provider, username, password, secondary_password=None, verify=True, api_version="v4"):
+    """Async: Create a persistent PKCE connection that auto-refreshes its token.
+
+    :param appliance: Network address of the Safeguard appliance.
+    :param provider: Authentication provider name (e.g. ``"local"``).
+    :param username: Username for authentication.
+    :param password: Password for authentication.
+    :param secondary_password: One-time password for MFA, or ``None``.
+    :param verify: CA certificate path or ``False`` to disable TLS verification.
+    :param api_version: API version (default ``"v4"``).
+    :returns: An authenticated :class:`AsyncConnection` with auto-refresh enabled.
+    """
+    conn = await async_connect_pkce(appliance, provider, username, password, secondary_password, verify, api_version)
     conn._auto_refresh = True
     return conn

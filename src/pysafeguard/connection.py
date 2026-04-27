@@ -161,7 +161,7 @@ class Connection:
         if not apiKey:
             raise ValueError("apiKey may not be null or empty")
 
-        if not cert and not key:
+        if not cert or not key:
             raise ValueError("cert path and key path may not be null or empty")
 
         with cls(host, verify=verify, apiVersion=apiVersion) as conn:
