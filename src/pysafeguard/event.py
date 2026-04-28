@@ -68,15 +68,21 @@ class EventHandlerRegistry:
     Event names are matched case-insensitively.  Each handler runs
     synchronously; exceptions are logged and swallowed so one bad
     handler cannot break the dispatch loop.
+
+    This class is thread-safe: handlers may be registered from one
+    thread while events are dispatched on another (e.g. the SignalR
+    background thread).
     """
 
     def __init__(self) -> None:
         self._handlers: dict[str, list[SafeguardEventHandler]] = {}
+        self._lock = threading.Lock()
 
     def register(self, event_name: str, handler: SafeguardEventHandler) -> None:
         """Register *handler* for *event_name*."""
         key = event_name.casefold()
-        self._handlers.setdefault(key, []).append(handler)
+        with self._lock:
+            self._handlers.setdefault(key, []).append(handler)
 
     def handle_event(self, raw_event: str) -> None:
         """Parse a raw JSON event string and dispatch to registered handlers."""
@@ -101,7 +107,10 @@ class EventHandlerRegistry:
         name = str(name)
         body = json.dumps(data) if not isinstance(data, str) else data
 
-        handlers = self._handlers.get(name.casefold(), [])
+        # Snapshot the handler list under the lock so we don't hold it
+        # while invoking user callbacks.
+        with self._lock:
+            handlers = list(self._handlers.get(name.casefold(), []))
         for handler in handlers:
             try:
                 handler(name, body)
@@ -111,13 +120,15 @@ class EventHandlerRegistry:
     @property
     def registered_events(self) -> list[str]:
         """Return a list of registered event name keys (lower-cased)."""
-        return list(self._handlers.keys())
+        with self._lock:
+            return list(self._handlers.keys())
 
     def copy(self) -> EventHandlerRegistry:
         """Return a shallow copy preserving all registrations."""
         new = EventHandlerRegistry()
-        for key, handler_list in self._handlers.items():
-            new._handlers[key] = list(handler_list)
+        with self._lock:
+            for key, handler_list in self._handlers.items():
+                new._handlers[key] = list(handler_list)
         return new
 
     # ------------------------------------------------------------------

@@ -382,6 +382,9 @@ class SafeguardClient:
         """
         resp = self.stream(HttpMethod.GET, service, endpoint, params=params, headers=headers, host=host, cert=cert, api_version=api_version)
         if resp.status_code != 200:
+            # Read the error body before closing — stream=True means the
+            # body is not pre-loaded, so close() would discard it.
+            resp.content  # noqa: B018  # force body read
             resp.close()
             raise ApiError.from_response(resp)
 
