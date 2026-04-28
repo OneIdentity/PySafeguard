@@ -84,10 +84,10 @@ class HiddenString:
         return not self._disposed and self._data is not None and len(self._data) > 0
 
     def __len__(self) -> int:
-        """Return the length of the stored value (or 0 if disposed)."""
+        """Return the character length of the stored value (or 0 if disposed)."""
         if self._disposed or self._data is None:
             return 0
-        return len(self._data)
+        return len(self._data.decode("utf-8"))
 
     def __eq__(self, other: object) -> bool:
         """Compare two HiddenStrings by their underlying value."""

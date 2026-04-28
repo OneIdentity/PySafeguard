@@ -171,7 +171,7 @@ class TestErrorHierarchy:
         resp = await async_connection.get(Service.CORE, "Users/999999999")
         assert resp.status == 404
         await resp.read()
-        err = ApiError.from_async_response(resp)
+        err = ApiError.from_async_response(resp, await resp.text())
         assert isinstance(err, NotFoundError)
         assert err.status_code == 404
 
@@ -184,7 +184,7 @@ class TestErrorHierarchy:
         resp = await client.get(Service.CORE, "Me")
         assert resp.status == 401
         await resp.read()
-        err = ApiError.from_async_response(resp)
+        err = ApiError.from_async_response(resp, await resp.text())
         assert isinstance(err, AuthenticationError)
         assert err.status_code == 401
         await client.close()

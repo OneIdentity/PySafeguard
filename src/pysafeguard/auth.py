@@ -100,12 +100,12 @@ async def _async_rsts_token_exchange(client: AsyncSafeguardClient, body: dict[st
     json_body: JsonType = dict(body)
     resp = await client.request(HttpMethod.POST, Service.RSTS, "oauth2/token", json=json_body, cert=cert)
     if resp.status != 200 or "application/json" not in resp.headers.get("content-type", ""):
-        raise ApiError.from_async_response(resp)
+        raise ApiError.from_async_response(resp, await resp.text())
     access_token = get_access_token(await resp.json(content_type=None))
 
     resp = await client.request(HttpMethod.POST, Service.CORE, "Token/LoginResponse", json={"StsAccessToken": access_token})
     if resp.status != 200 or "application/json" not in resp.headers.get("content-type", ""):
-        raise ApiError.from_async_response(resp)
+        raise ApiError.from_async_response(resp, await resp.text())
     return get_user_token(await resp.json(content_type=None))
 
 

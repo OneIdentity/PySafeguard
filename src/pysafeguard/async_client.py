@@ -344,7 +344,7 @@ class AsyncSafeguardClient:
         resp = await self.stream(HttpMethod.GET, service, endpoint, params=params, headers=headers, host=host, cert=cert, api_version=api_version)
         if resp.status != 200:
             await resp.read()
-            raise ApiError.from_async_response(resp)
+            raise ApiError.from_async_response(resp, await resp.text())
 
         written = 0
         try:

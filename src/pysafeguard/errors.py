@@ -86,14 +86,13 @@ class ApiError(SafeguardError):
         return subclass(message, status_code=status_code, response_body=body)
 
     @classmethod
-    def from_async_response(cls, resp: ClientResponse) -> ApiError:
+    def from_async_response(cls, resp: ClientResponse, body: str) -> ApiError:
         """Create an ApiError from an async ``aiohttp.ClientResponse``.
 
-        .. note::
-            The response body must have been read (``await resp.read()``)
-            before calling this method, or the body will be empty.
+        :param resp: The aiohttp response.
+        :param body: The response body text (must be read by the caller
+            with ``await resp.text()`` before calling this method).
         """
-        body = resp._body.decode("utf-8", errors="replace") if resp._body else ""  # noqa: SLF001
         message = f"{resp.status} {resp.reason}: {resp.method} {resp.url}\n{body}"
         status_code = resp.status
 

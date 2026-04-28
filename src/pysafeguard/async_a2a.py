@@ -152,7 +152,7 @@ class AsyncA2AContext:
             cert=self._cert,
         )
         if resp.status not in (200, 201):
-            raise ApiError.from_async_response(resp)
+            raise ApiError.from_async_response(resp, await resp.text())
         return str(await resp.json())
 
     # -- Discovery (Core API, lazy user auth) --------------------------------
@@ -173,7 +173,7 @@ class AsyncA2AContext:
 
         resp = await self._conn.request(HttpMethod.GET, Service.CORE, "A2ARegistrations")
         if resp.status != 200:
-            raise ApiError.from_async_response(resp)
+            raise ApiError.from_async_response(resp, await resp.text())
         registrations = await resp.json()
         if not isinstance(registrations, list):
             return []
@@ -326,7 +326,7 @@ class AsyncA2AContext:
             cert=self._cert,
         )
         if resp.status != 200:
-            raise ApiError.from_async_response(resp)
+            raise ApiError.from_async_response(resp, await resp.text())
         return typing.cast(JsonType, await resp.json())
 
     async def _a2a_put(
@@ -351,4 +351,4 @@ class AsyncA2AContext:
             cert=self._cert,
         )
         if resp.status not in (200, 204):
-            raise ApiError.from_async_response(resp)
+            raise ApiError.from_async_response(resp, await resp.text())

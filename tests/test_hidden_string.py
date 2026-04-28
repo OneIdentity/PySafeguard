@@ -99,7 +99,7 @@ class TestHiddenStringLen:
 
     def test_len_unicode(self):
         hs = HiddenString("pässwörd")
-        assert len(hs) == len("pässwörd".encode("utf-8"))
+        assert len(hs) == len("pässwörd")
 
 
 class TestHiddenStringEq:
