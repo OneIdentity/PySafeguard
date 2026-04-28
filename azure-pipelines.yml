@@ -58,9 +58,12 @@ jobs:
       tagSource: 'userSpecifiedTag'
       tag: '$(PackageVersion)'
       title: '$(PackageVersion)'
+      releaseNotesSource: 'inline'
+      releaseNotesInline: ''
       isPreRelease: ${{ not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')) }}
       changeLogCompareToRelease: 'lastFullRelease'
       changeLogType: 'commitBased'
+      addChangeLog: true
       assets: $(Build.ArtifactStagingDirectory)/dist/*
 
   # PyPI publish only for tagged builds
