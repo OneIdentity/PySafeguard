@@ -11,7 +11,7 @@ from pysafeguard import (
     SafeguardClient,
     Service,
 )
-from pysafeguard.errors import SafeguardError
+from pysafeguard.errors import ApiError, AuthenticationError, NotFoundError, SafeguardError
 
 pytestmark = pytest.mark.integration
 
@@ -129,6 +129,65 @@ class TestAsyncErrorHandling:
     async def test_404_returns_response(self, async_connection):
         resp = await async_connection.get(Service.CORE, "Users/999999999")
         assert resp.status == 404
+
+
+# ===========================================================================
+# Error hierarchy — verify correct exception subclasses from live API
+# ===========================================================================
+
+
+class TestErrorHierarchy:
+    """Verify that ApiError.from_response maps status codes to correct subclasses."""
+
+    def test_404_maps_to_not_found_error(self, sync_connection):
+        """A 404 response produces a NotFoundError via from_response."""
+        resp = sync_connection.get(Service.CORE, "Users/999999999")
+        assert resp.status_code == 404
+        err = ApiError.from_response(resp)
+        assert isinstance(err, NotFoundError)
+        assert err.status_code == 404
+
+    def test_401_maps_to_authentication_error(self, spp_host, spp_verify):
+        """An invalid token produces a 401 → AuthenticationError."""
+        client = SafeguardClient(spp_host, verify=spp_verify)
+        client._user_token = "invalid-token-for-testing"
+        client._headers["authorization"] = "Bearer invalid-token-for-testing"
+        resp = client.get(Service.CORE, "Me")
+        assert resp.status_code == 401
+        err = ApiError.from_response(resp)
+        assert isinstance(err, AuthenticationError)
+        assert err.status_code == 401
+
+    def test_generic_api_error_for_other_codes(self, sync_connection):
+        """A non-mapped error code still produces an ApiError."""
+        resp = sync_connection.delete(Service.CORE, "Me")
+        assert resp.status_code >= 400
+        err = ApiError.from_response(resp)
+        assert isinstance(err, ApiError)
+
+    @pytest.mark.asyncio
+    async def test_async_404_maps_to_not_found_error(self, async_connection):
+        """Async 404 produces NotFoundError via from_async_response."""
+        resp = await async_connection.get(Service.CORE, "Users/999999999")
+        assert resp.status == 404
+        await resp.read()
+        err = ApiError.from_async_response(resp)
+        assert isinstance(err, NotFoundError)
+        assert err.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_async_401_maps_to_authentication_error(self, spp_host, spp_verify):
+        """Async invalid token produces AuthenticationError."""
+        client = AsyncSafeguardClient(spp_host, verify=spp_verify)
+        client._user_token = "invalid-token-for-testing"
+        client._headers["authorization"] = "Bearer invalid-token-for-testing"
+        resp = await client.get(Service.CORE, "Me")
+        assert resp.status == 401
+        await resp.read()
+        err = ApiError.from_async_response(resp)
+        assert isinstance(err, AuthenticationError)
+        assert err.status_code == 401
+        await client.close()
 
 
 # ===========================================================================

@@ -31,9 +31,11 @@ from pysafeguard import (
     SafeguardClient,
     SafeguardEventListener,
     Service,
+    SshKeyFormat,
 )
 from pysafeguard.a2a import A2AContext
 from pysafeguard.async_a2a import AsyncA2AContext
+from pysafeguard.errors import AuthorizationError
 
 pytestmark = pytest.mark.integration
 
@@ -52,7 +54,9 @@ class _A2AEnv:
     key_file: str
     thumbprint: str
     api_key: str
+    ssh_api_key: str
     account_id: int
+    ssh_account_id: int
     asset_id: int
     reg_id: int
     cert_user_id: int
@@ -61,6 +65,7 @@ class _A2AEnv:
     admin_client: SafeguardClient
     test_admin_client: SafeguardClient
     original_password: str = "A2AOriginal1!"
+    original_ssh_key: str = ""
 
 
 @pytest.fixture(scope="module")
@@ -196,6 +201,42 @@ def a2a_env(spp_host, spp_username, spp_password, spp_verify):
     assert r.status_code in (200, 201), f"Add retrievable failed: {r.text[:300]}"
     env.api_key = r.json()["ApiKey"]
 
+    # --- create SSH key account and add as second retrievable (PrivateKey) ---
+    r = c.post(
+        Service.CORE,
+        "AssetAccounts",
+        json={"Name": "PySg_a2a_sshacct", "Asset": {"Id": env.asset_id}},
+    )
+    assert r.status_code == 201, f"Create SSH account failed: {r.text[:300]}"
+    env.ssh_account_id = r.json()["Id"]
+
+    # Generate an SSH key to install on the account
+    ssh_key_path = os.path.join(env.tmpdir, "ssh_test_key")
+    subprocess.run(
+        ["ssh-keygen", "-t", "ed25519", "-f", ssh_key_path, "-N", "", "-q"],
+        capture_output=True,
+        check=True,
+    )
+    with open(ssh_key_path) as f:
+        env.original_ssh_key = f.read()
+
+    # Install SSH key on the account via Core API
+    r = c.put(
+        Service.CORE,
+        f"AssetAccounts/{env.ssh_account_id}/SshKey",
+        json={"PrivateKey": env.original_ssh_key, "Passphrase": ""},
+    )
+    assert r.status_code in (200, 204), f"Set SSH key failed: {r.status_code} {r.text[:300]}"
+
+    # Add SSH account as retrievable with Type=PrivateKey
+    r = c.post(
+        Service.CORE,
+        f"A2ARegistrations/{env.reg_id}/RetrievableAccounts",
+        json={"AccountId": env.ssh_account_id, "Type": "PrivateKey"},
+    )
+    assert r.status_code in (200, 201), f"Add SSH retrievable failed: {r.text[:300]}"
+    env.ssh_api_key = r.json()["ApiKey"]
+
     # --- readiness check: verify credential retrieval works ---
     with A2AContext(env.host, env.cert_file, env.key_file, verify=env.verify) as a2a:
         pw = a2a.retrieve_password(env.api_key)
@@ -205,6 +246,7 @@ def a2a_env(spp_host, spp_username, spp_password, spp_verify):
 
     # --- teardown: best-effort cleanup of every resource ---
     _safe_delete(c, Service.CORE, f"A2ARegistrations/{env.reg_id}")
+    _safe_delete(c, Service.CORE, f"AssetAccounts/{env.ssh_account_id}")
     _safe_delete(c, Service.CORE, f"AssetAccounts/{env.account_id}")
     _safe_delete(c, Service.CORE, f"Assets/{env.asset_id}")
     _safe_delete(c, Service.CORE, f"Users/{env.cert_user_id}")
@@ -490,3 +532,193 @@ class TestClientPersistentEventListener:
         listener = client.get_persistent_event_listener()
         result = listener.on("Event1", lambda n, b: None).on("Event2", lambda n, b: None).on_state_change(lambda s: None)
         assert result is listener
+
+
+# ===========================================================================
+# A2A SSH key operations (PrivateKey type)
+# ===========================================================================
+
+
+@pytest.fixture()
+def _reset_ssh_key(a2a_env):
+    """Reset the SSH key on the SSH account to its original value after each test."""
+    yield
+    with A2AContext(a2a_env.host, a2a_env.cert_file, a2a_env.key_file, verify=a2a_env.verify) as a2a:
+        try:
+            a2a.set_private_key(a2a_env.ssh_api_key, a2a_env.original_ssh_key)
+        except Exception:
+            pass
+
+
+class TestA2ARetrievePrivateKey:
+    """Test A2AContext SSH private key retrieval."""
+
+    def test_retrieve_private_key(self, a2a_env):
+        """Retrieve the SSH key via A2AContext."""
+        with A2AContext(a2a_env.host, a2a_env.cert_file, a2a_env.key_file, verify=a2a_env.verify) as a2a:
+            key = a2a.retrieve_private_key(a2a_env.ssh_api_key)
+            assert key.value  # non-empty
+            assert "KEY" in key.value or "key" in key.value  # some key format
+
+    def test_retrieve_private_key_openssh_format(self, a2a_env):
+        """Retrieve key explicitly requesting OpenSSH format."""
+        with A2AContext(a2a_env.host, a2a_env.cert_file, a2a_env.key_file, verify=a2a_env.verify) as a2a:
+            key = a2a.retrieve_private_key(a2a_env.ssh_api_key, key_format=SshKeyFormat.OPENSSH)
+            assert key.value
+            assert len(key.value) > 20
+
+    def test_quick_retrieve_private_key(self, a2a_env):
+        """One-shot class method for private key retrieval."""
+        key = A2AContext.quick_retrieve_private_key(
+            a2a_env.host,
+            a2a_env.ssh_api_key,
+            a2a_env.cert_file,
+            a2a_env.key_file,
+            verify=a2a_env.verify,
+        )
+        assert key.value
+        assert len(key.value) > 20
+
+
+class TestA2ASetPrivateKey:
+    """Test A2AContext SSH private key mutation."""
+
+    def test_set_and_retrieve(self, a2a_env, _reset_ssh_key):
+        """set_private_key changes the key, retrievable immediately."""
+        # Generate a new key
+        new_key_path = os.path.join(a2a_env.tmpdir, "new_ssh_key")
+        subprocess.run(
+            ["ssh-keygen", "-t", "ed25519", "-f", new_key_path, "-N", "", "-q"],
+            capture_output=True,
+            check=True,
+        )
+        with open(new_key_path) as f:
+            new_key = f.read()
+
+        with A2AContext(a2a_env.host, a2a_env.cert_file, a2a_env.key_file, verify=a2a_env.verify) as a2a:
+            a2a.set_private_key(a2a_env.ssh_api_key, new_key)
+            retrieved = a2a.retrieve_private_key(a2a_env.ssh_api_key)
+            assert retrieved.value  # non-empty key was returned
+
+
+# ===========================================================================
+# Async A2A SSH key operations
+# ===========================================================================
+
+
+class TestAsyncA2APrivateKey:
+    """Test AsyncA2AContext SSH private key operations."""
+
+    @pytest.mark.asyncio
+    async def test_async_retrieve_private_key(self, a2a_env):
+        """Async private key retrieval."""
+        async with AsyncA2AContext(a2a_env.host, a2a_env.cert_file, a2a_env.key_file, verify=a2a_env.verify) as a2a:
+            key = await a2a.retrieve_private_key(a2a_env.ssh_api_key)
+            assert key.value
+            assert len(key.value) > 20
+
+    @pytest.mark.asyncio
+    async def test_async_set_and_retrieve(self, a2a_env, _reset_ssh_key):
+        """Async set + retrieve cycle for SSH key."""
+        new_key_path = os.path.join(a2a_env.tmpdir, "async_ssh_key")
+        subprocess.run(
+            ["ssh-keygen", "-t", "ed25519", "-f", new_key_path, "-N", "", "-q"],
+            capture_output=True,
+            check=True,
+        )
+        with open(new_key_path) as f:
+            new_key = f.read()
+
+        async with AsyncA2AContext(a2a_env.host, a2a_env.cert_file, a2a_env.key_file, verify=a2a_env.verify) as a2a:
+            await a2a.set_private_key(a2a_env.ssh_api_key, new_key)
+            retrieved = await a2a.retrieve_private_key(a2a_env.ssh_api_key)
+            assert retrieved.value
+
+    @pytest.mark.asyncio
+    async def test_async_quick_retrieve_private_key(self, a2a_env):
+        """Async one-shot class method for private key retrieval."""
+        key = await AsyncA2AContext.quick_retrieve_private_key(
+            a2a_env.host,
+            a2a_env.ssh_api_key,
+            a2a_env.cert_file,
+            a2a_env.key_file,
+            verify=a2a_env.verify,
+        )
+        assert key.value
+
+
+# ===========================================================================
+# A2A error handling — AuthenticationError with invalid API key
+# ===========================================================================
+
+
+class TestA2AErrorHandling:
+    """Test that A2A operations with bad credentials produce correct error types."""
+
+    def test_invalid_api_key_raises_authorization_error(self, a2a_env):
+        """A2A retrieve with an invalid API key should raise AuthorizationError (403)."""
+        with A2AContext(a2a_env.host, a2a_env.cert_file, a2a_env.key_file, verify=a2a_env.verify) as a2a:
+            with pytest.raises(AuthorizationError) as exc_info:
+                a2a.retrieve_password("bogus-api-key-00000000")
+            assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_async_invalid_api_key_raises_authorization_error(self, a2a_env):
+        """Async A2A with invalid API key also raises AuthorizationError."""
+        async with AsyncA2AContext(a2a_env.host, a2a_env.cert_file, a2a_env.key_file, verify=a2a_env.verify) as a2a:
+            with pytest.raises(AuthorizationError) as exc_info:
+                await a2a.retrieve_password("bogus-api-key-00000000")
+            assert exc_info.value.status_code == 403
+
+
+# ===========================================================================
+# AsyncA2AContext event listener tests
+# ===========================================================================
+
+
+class TestAsyncA2AEventListeners:
+    """Test event listener creation from AsyncA2AContext.
+
+    get_event_listener() and get_persistent_event_listener() are sync methods
+    on AsyncA2AContext that return sync listener objects — verify they work.
+    """
+
+    @pytest.mark.asyncio
+    async def test_async_a2a_get_event_listener(self, a2a_env):
+        """AsyncA2AContext.get_event_listener returns a usable listener."""
+        async with AsyncA2AContext(a2a_env.host, a2a_env.cert_file, a2a_env.key_file, verify=a2a_env.verify) as a2a:
+            listener = a2a.get_event_listener(a2a_env.api_key)
+            assert isinstance(listener, SafeguardEventListener)
+            assert listener._api_key == a2a_env.api_key
+
+    @pytest.mark.asyncio
+    async def test_async_a2a_event_listener_start_stop(self, a2a_env):
+        """Event listener from AsyncA2AContext can start and stop."""
+        async with AsyncA2AContext(a2a_env.host, a2a_env.cert_file, a2a_env.key_file, verify=a2a_env.verify) as a2a:
+            listener = a2a.get_event_listener(a2a_env.api_key)
+            try:
+                listener.start()
+                assert listener.is_started
+            finally:
+                listener.stop()
+            assert not listener.is_started
+
+    @pytest.mark.asyncio
+    async def test_async_a2a_get_persistent_event_listener(self, a2a_env):
+        """AsyncA2AContext.get_persistent_event_listener returns a persistent listener."""
+        async with AsyncA2AContext(a2a_env.host, a2a_env.cert_file, a2a_env.key_file, verify=a2a_env.verify) as a2a:
+            listener = a2a.get_persistent_event_listener(a2a_env.api_key)
+            assert isinstance(listener, PersistentSafeguardEventListener)
+
+    @pytest.mark.asyncio
+    async def test_async_a2a_persistent_listener_start_stop(self, a2a_env):
+        """Persistent listener from AsyncA2AContext can start and stop."""
+        async with AsyncA2AContext(a2a_env.host, a2a_env.cert_file, a2a_env.key_file, verify=a2a_env.verify) as a2a:
+            listener = a2a.get_persistent_event_listener(a2a_env.api_key)
+            try:
+                listener.start()
+                time.sleep(1)
+                assert listener.is_started
+            finally:
+                listener.stop()
+            assert not listener.is_started
