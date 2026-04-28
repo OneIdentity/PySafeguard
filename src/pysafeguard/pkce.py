@@ -15,9 +15,9 @@ from urllib.parse import parse_qs, urlparse
 
 from requests import Response, Session
 
-from .connection import Connection, DEFAULT_TIMEOUT, _PkceCredential
-from .exceptions import SafeguardException
-from .hidden_string import HiddenString
+from .errors import SafeguardError
+
+DEFAULT_TIMEOUT = 300
 
 REDIRECT_URI = "urn:InstalledApplication"
 
@@ -50,7 +50,7 @@ def get_pkce_token(
     :param verify: A path to a CA certificate file, or ``False`` to disable TLS verification.
     :param api_version: API version to use (default ``"v4"``).
     :returns: A Safeguard user token string.
-    :raises SafeguardException: If authentication fails.
+    :raises SafeguardError: If authentication fails.
     """
     csrf_token = _generate_csrf_token()
     code_verifier = _generate_code_verifier()
@@ -89,10 +89,10 @@ def get_pkce_token(
         # Step 6: Generate claims and extract authorization code
         claims_resp = _rsts_request(session, pkce_base_url + _STEP_GENERATE_CLAIMS, form_data)
         if claims_resp.status_code != 200:
-            raise SafeguardException(
+            raise SafeguardError(
                 f"Failed to generate claims: {claims_resp.text}",
                 status_code=claims_resp.status_code,
-                response=claims_resp.text,
+                response_body=claims_resp.text,
             )
 
         auth_code = _extract_authorization_code(claims_resp.text)
@@ -102,45 +102,6 @@ def get_pkce_token(
 
         # Exchange rSTS token for Safeguard user token
         return _post_login_response(session, appliance, rsts_access_token, api_version)
-
-
-def connect_pkce(
-    appliance: str,
-    provider: str,
-    username: str,
-    password: str,
-    secondary_password: str | None = None,
-    verify: bool | str = True,
-    api_version: str = "v4",
-) -> Connection:
-    """Connect to Safeguard using PKCE non-interactive login.
-
-    This is the recommended authentication method for newer appliances where
-    Resource Owner Grant (ROG) is disabled by default.
-
-    :param appliance: Network address (hostname or IP) of the Safeguard appliance.
-    :param provider: Authentication provider name (e.g. ``"local"``).
-    :param username: Username for authentication.
-    :param password: Password for authentication.
-    :param secondary_password: One-time password for MFA (e.g. TOTP code), or ``None`` if not required.
-    :param verify: A path to a CA certificate file, or ``False`` to disable TLS verification.
-    :param api_version: API version to use (default ``"v4"``).
-    :returns: An authenticated :class:`Connection` ready for API calls.
-    :raises SafeguardException: If authentication fails.
-    """
-    user_token = get_pkce_token(appliance, provider, username, password, secondary_password, verify, api_version)
-
-    conn = Connection(appliance, verify=verify, apiVersion=api_version)
-    conn._set_user_token(user_token)
-
-    # Store PKCE credential for refresh (MFA connections cannot be refreshed
-    # since one-time passwords are not reusable, but the credential is stored
-    # so refresh_access_token() can give a clear error message).
-    secure_secondary = HiddenString(secondary_password) if secondary_password is not None else None
-    conn._replace_auth_credential(  # noqa: SLF001
-        _PkceCredential(provider, username, HiddenString(password), secure_secondary)
-    )
-    return conn
 
 
 # ---------------------------------------------------------------------------
@@ -185,7 +146,7 @@ def _parse_hostname(appliance: str) -> str:
 def _rsts_request(session: Session, url: str, form_data: dict[str, str]) -> Response:
     """POST form data to an rSTS login controller URL.
 
-    Returns the response. Raises :class:`SafeguardException` for HTTP errors
+    Returns the response. Raises :class:`SafeguardError` for HTTP errors
     (4xx/5xx), but allows 200 and 203 through (203 is used by rSTS for
     challenges and non-fatal status).
     """
@@ -199,10 +160,10 @@ def _rsts_request(session: Session, url: str, form_data: dict[str, str]) -> Resp
     status = resp.status_code
     if not (200 <= status < 300) and status != 203:
         error_message = resp.text.strip() if resp.text.strip() else str(status)
-        raise SafeguardException(
+        raise SafeguardError(
             f"rSTS authentication error: {error_message}",
             status_code=status,
-            response=resp.text,
+            response_body=resp.text,
         )
 
     return resp
@@ -229,7 +190,7 @@ def _handle_secondary_auth(
         return
 
     if secondary_password is None:
-        raise SafeguardException(
+        raise SafeguardError(
             f"Multi-factor authentication is required (provider: {secondary_provider_id}) "
             "but no secondary password was provided. Pass secondary_password to supply the one-time code."
         )
@@ -265,13 +226,13 @@ def _handle_secondary_auth(
         except (json.JSONDecodeError, TypeError):
             if mfa_resp.text:
                 error_message = mfa_resp.text
-        raise SafeguardException(f"Multi-factor authentication failed: {error_message}")
+        raise SafeguardError(f"Multi-factor authentication failed: {error_message}")
 
     if not (200 <= mfa_resp.status_code < 300):
-        raise SafeguardException(
+        raise SafeguardError(
             f"Multi-factor authentication failed: {mfa_resp.text}",
             status_code=mfa_resp.status_code,
-            response=mfa_resp.text,
+            response_body=mfa_resp.text,
         )
 
 
@@ -285,20 +246,20 @@ def _extract_authorization_code(response_body: str) -> str:
     try:
         data: object = json.loads(response_body)
     except (json.JSONDecodeError, TypeError) as ex:
-        raise SafeguardException("Failed to parse authorization code from rSTS response") from ex
+        raise SafeguardError("Failed to parse authorization code from rSTS response") from ex
 
     if not isinstance(data, dict):
-        raise SafeguardException("Failed to parse authorization code from rSTS response")
+        raise SafeguardError("Failed to parse authorization code from rSTS response")
 
     relying_party_url = data.get("RelyingPartyUrl")
     if not relying_party_url or not isinstance(relying_party_url, str):
-        raise SafeguardException("rSTS response did not contain a RelyingPartyUrl. The authentication process may be incomplete.")
+        raise SafeguardError("rSTS response did not contain a RelyingPartyUrl. The authentication process may be incomplete.")
 
     parsed = urlparse(relying_party_url)
     params = parse_qs(parsed.query)
     codes = params.get("code", [])
     if not codes:
-        raise SafeguardException("rSTS response did not contain an authorization code")
+        raise SafeguardError("rSTS response did not contain an authorization code")
 
     return codes[0]
 
@@ -312,15 +273,15 @@ def _resolve_identity_provider(session: Session, appliance: str, api_version: st
     resp = session.get(url, headers={"Accept": "application/json"}, timeout=DEFAULT_TIMEOUT)
 
     if not resp.ok:
-        raise SafeguardException(
+        raise SafeguardError(
             f"Failed to retrieve authentication providers: {resp.status_code} {resp.text}",
             status_code=resp.status_code,
-            response=resp.text,
+            response_body=resp.text,
         )
 
     providers: object = resp.json()
     if not isinstance(providers, list):
-        raise SafeguardException("Unexpected response from AuthenticationProviders endpoint")
+        raise SafeguardError("Unexpected response from AuthenticationProviders endpoint")
 
     provider_lower = provider.lower()
 
@@ -346,7 +307,7 @@ def _resolve_identity_provider(session: Session, appliance: str, api_version: st
                 return rsts_id
 
     known = [f"{p.get('Name', '?')} ({p.get('RstsProviderId', '?')})" for p in providers if isinstance(p, dict)]
-    raise SafeguardException(f"Unable to find provider matching '{provider}' in [{', '.join(known)}]")
+    raise SafeguardError(f"Unable to find provider matching '{provider}' in [{', '.join(known)}]")
 
 
 def _post_authorization_code(session: Session, appliance: str, code: str, code_verifier: str) -> str:
@@ -362,19 +323,19 @@ def _post_authorization_code(session: Session, appliance: str, code: str, code_v
     resp = session.post(url, json=body, headers={"Accept": "application/json"}, timeout=DEFAULT_TIMEOUT)
 
     if not resp.ok:
-        raise SafeguardException(
+        raise SafeguardError(
             f"Failed to exchange authorization code: {resp.status_code} {resp.text}",
             status_code=resp.status_code,
-            response=resp.text,
+            response_body=resp.text,
         )
 
     data: object = resp.json()
     if not isinstance(data, dict):
-        raise SafeguardException("Unexpected response from RSTS token endpoint")
+        raise SafeguardError("Unexpected response from RSTS token endpoint")
 
     access_token = data.get("access_token")
     if not isinstance(access_token, str) or not access_token:
-        raise SafeguardException("RSTS response did not contain an access_token")
+        raise SafeguardError("RSTS response did not contain an access_token")
 
     return access_token
 
@@ -387,22 +348,22 @@ def _post_login_response(session: Session, appliance: str, rsts_token: str, api_
     resp = session.post(url, json=body, headers={"Accept": "application/json"}, timeout=DEFAULT_TIMEOUT)
 
     if not resp.ok:
-        raise SafeguardException(
+        raise SafeguardError(
             f"Failed to exchange RSTS token: {resp.status_code} {resp.text}",
             status_code=resp.status_code,
-            response=resp.text,
+            response_body=resp.text,
         )
 
     data: object = resp.json()
     if not isinstance(data, dict):
-        raise SafeguardException("Unexpected response from Token/LoginResponse endpoint")
+        raise SafeguardError("Unexpected response from Token/LoginResponse endpoint")
 
     status = data.get("Status")
     if status != "Success":
-        raise SafeguardException(f"Error exchanging RSTS token, status: {status}")
+        raise SafeguardError(f"Error exchanging RSTS token, status: {status}")
 
     user_token = data.get("UserToken")
     if not isinstance(user_token, str) or not user_token:
-        raise SafeguardException("LoginResponse did not contain a UserToken")
+        raise SafeguardError("LoginResponse did not contain a UserToken")
 
     return user_token

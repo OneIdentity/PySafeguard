@@ -318,3 +318,66 @@ class TestConnectionEventListenerFactory:
 
 
 # NOTE: TestDeprecatedSignalR removed in v8.0 — PySafeguardConnection was deleted.
+
+
+# ---------------------------------------------------------------------------
+# PersistentSafeguardEventListener factory methods (from_password / from_certificate)
+# ---------------------------------------------------------------------------
+
+
+class TestPersistentFactoryFromPassword:
+    """Verify from_password creates a working listener using SafeguardClient."""
+
+    def test_from_password_creates_listener(self):
+        listener = PersistentSafeguardEventListener.from_password("host", "admin", "pass123")
+        assert isinstance(listener, PersistentSafeguardEventListener)
+        assert listener._host == "host"
+        assert not listener.is_started
+
+    def test_from_password_has_callable_token_factory(self):
+        listener = PersistentSafeguardEventListener.from_password("host", "admin", "pass123")
+        assert callable(listener._token_factory)
+
+
+class TestPersistentFactoryFromCertificate:
+    def test_from_certificate_creates_listener(self):
+        listener = PersistentSafeguardEventListener.from_certificate("host", "cert.pem", "key.pem")
+        assert isinstance(listener, PersistentSafeguardEventListener)
+        assert listener._host == "host"
+
+    def test_from_certificate_has_callable_token_factory(self):
+        listener = PersistentSafeguardEventListener.from_certificate("host", "cert.pem", "key.pem")
+        assert callable(listener._token_factory)
+
+
+# ---------------------------------------------------------------------------
+# Old modules deleted — verify they don't exist
+# ---------------------------------------------------------------------------
+
+
+class TestOldModulesRemoved:
+    def test_connection_module_removed(self):
+        with pytest.raises(ModuleNotFoundError):
+            import pysafeguard.connection  # noqa: F401
+
+    def test_async_connection_module_removed(self):
+        with pytest.raises(ModuleNotFoundError):
+            import pysafeguard.async_connection  # noqa: F401
+
+    def test_exceptions_module_removed(self):
+        with pytest.raises(ModuleNotFoundError):
+            import pysafeguard.exceptions  # noqa: F401
+
+
+class TestPkceModulesClean:
+    """Verify PKCE modules import without depending on deleted modules."""
+
+    def test_pkce_imports_cleanly(self):
+        from pysafeguard.pkce import get_pkce_token
+
+        assert callable(get_pkce_token)
+
+    def test_pkce_uses_safeguard_error(self):
+        from pysafeguard.pkce import SafeguardError as PkceError
+
+        assert PkceError is SafeguardError

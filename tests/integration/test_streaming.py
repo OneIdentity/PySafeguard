@@ -220,6 +220,32 @@ class TestAsyncDownload:
             os.unlink(tmp_path)
             await client.close()
 
+    @pytest.mark.asyncio
+    async def test_download_with_small_chunks(self, spp_host, spp_username, spp_password, spp_verify, backup_id):
+        """download() respects the chunk_size parameter."""
+        client = AsyncSafeguardClient(
+            spp_host,
+            auth=PasswordAuth("local", spp_username, spp_password),
+            verify=spp_verify,
+        )
+        await client.login()
+
+        with tempfile.NamedTemporaryFile(suffix=".sgb", delete=False) as tmp:
+            tmp_path = tmp.name
+
+        try:
+            written = await client.download(
+                Service.APPLIANCE,
+                f"Backups/{backup_id}/Download",
+                tmp_path,
+                chunk_size=4096,
+            )
+            assert written > 0
+            assert os.path.getsize(tmp_path) == written
+        finally:
+            os.unlink(tmp_path)
+            await client.close()
+
 
 class TestAsyncUpload:
     """Test AsyncSafeguardClient.upload() for file uploads."""
@@ -242,4 +268,30 @@ class TestAsyncUpload:
             )
             assert resp.status in (400, 403, 409, 415, 500)
         finally:
+            await client.close()
+
+    @pytest.mark.asyncio
+    async def test_upload_from_file(self, spp_host, spp_username, spp_password, spp_verify):
+        """upload() can stream from a file path."""
+        client = AsyncSafeguardClient(
+            spp_host,
+            auth=PasswordAuth("local", spp_username, spp_password),
+            verify=spp_verify,
+        )
+        await client.login()
+
+        with tempfile.NamedTemporaryFile(suffix=".sgb", delete=False) as tmp:
+            tmp.write(b"not-a-real-backup-file-content")
+            tmp_path = tmp.name
+
+        try:
+            resp = await client.upload(
+                Service.APPLIANCE,
+                "Backups/Upload",
+                tmp_path,
+                content_type="application/octet-stream",
+            )
+            assert resp.status in (400, 403, 409, 415, 500)
+        finally:
+            os.unlink(tmp_path)
             await client.close()

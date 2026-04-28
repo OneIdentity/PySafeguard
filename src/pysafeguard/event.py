@@ -378,15 +378,19 @@ class PersistentSafeguardEventListener:
         :param verify: TLS verification setting.
         :returns: A new :class:`PersistentSafeguardEventListener`.
         """
-        from .connection import Connection
+        from .auth import PasswordAuth
+        from .client import SafeguardClient
 
         def token_factory() -> str:
-            with Connection(host, verify=verify) as conn:
-                conn.connect_password(username, password, provider)
-                token = conn.UserToken
+            client = SafeguardClient(host, auth=PasswordAuth(provider, username, password), verify=verify)
+            try:
+                client.login()
+                token = client.user_token
                 if token is None:
                     raise SafeguardError("Authentication succeeded but no token was returned")
                 return token
+            finally:
+                client.close()
 
         return cls(host, token_factory, verify, **kwargs)
 
@@ -409,15 +413,19 @@ class PersistentSafeguardEventListener:
         :param verify: TLS verification setting.
         :returns: A new :class:`PersistentSafeguardEventListener`.
         """
-        from .connection import Connection
+        from .auth import CertificateAuth
+        from .client import SafeguardClient
 
         def token_factory() -> str:
-            with Connection(host, verify=verify) as conn:
-                conn.connect_certificate(cert_file, key_file, provider)
-                token = conn.UserToken
+            client = SafeguardClient(host, auth=CertificateAuth(cert_file, key_file, provider), verify=verify)
+            try:
+                client.login()
+                token = client.user_token
                 if token is None:
                     raise SafeguardError("Authentication succeeded but no token was returned")
                 return token
+            finally:
+                client.close()
 
         return cls(host, token_factory, verify, **kwargs)
 

@@ -12,10 +12,9 @@ import ssl
 from aiohttp import ClientSession, ClientTimeout, CookieJar
 from truststore import SSLContext
 
-from .async_connection import AsyncConnection, DEFAULT_TIMEOUT, _AsyncPkceCredential
-from .exceptions import SafeguardException
-from .hidden_string import HiddenString
+from .errors import SafeguardError
 from .pkce import (
+    DEFAULT_TIMEOUT,
     REDIRECT_URI,
     _STEP_GENERATE_CLAIMS,
     _STEP_INIT,
@@ -58,7 +57,7 @@ async def async_get_pkce_token(
     :param verify: CA certificate path or ``False`` to disable TLS verification.
     :param api_version: API version to use (default ``"v4"``).
     :returns: A Safeguard user token string.
-    :raises SafeguardException: If authentication fails.
+    :raises SafeguardError: If authentication fails.
     """
     csrf_token = _generate_csrf_token()
     code_verifier = _generate_code_verifier()
@@ -98,10 +97,10 @@ async def async_get_pkce_token(
         # Step 6: Generate claims
         claims_text, claims_status = await _async_rsts_request(session, pkce_base_url + _STEP_GENERATE_CLAIMS, form_data, ssl_context, timeout)
         if claims_status != 200:
-            raise SafeguardException(
+            raise SafeguardError(
                 f"Failed to generate claims: {claims_text}",
                 status_code=claims_status,
-                response=claims_text,
+                response_body=claims_text,
             )
 
         auth_code = _extract_authorization_code(claims_text)
@@ -109,39 +108,6 @@ async def async_get_pkce_token(
         rsts_access_token = await _async_post_authorization_code(session, appliance, auth_code, code_verifier, ssl_context, timeout)
 
         return await _async_post_login_response(session, appliance, rsts_access_token, api_version, ssl_context, timeout)
-
-
-async def async_connect_pkce(
-    appliance: str,
-    provider: str,
-    username: str,
-    password: str,
-    secondary_password: str | None = None,
-    verify: bool | str = True,
-    api_version: str = "v4",
-) -> AsyncConnection:
-    """Connect to Safeguard using async PKCE non-interactive login.
-
-    :param appliance: Network address (hostname or IP) of the Safeguard appliance.
-    :param provider: Authentication provider name (e.g. ``"local"``).
-    :param username: Username for authentication.
-    :param password: Password for authentication.
-    :param secondary_password: One-time password for MFA, or ``None``.
-    :param verify: CA certificate path or ``False`` to disable TLS verification.
-    :param api_version: API version to use (default ``"v4"``).
-    :returns: An authenticated :class:`AsyncConnection`.
-    :raises SafeguardException: If authentication fails.
-    """
-    user_token = await async_get_pkce_token(appliance, provider, username, password, secondary_password, verify, api_version)
-
-    conn = AsyncConnection(appliance, verify=verify, apiVersion=api_version)
-    conn._set_user_token(user_token)
-
-    secure_secondary = HiddenString(secondary_password) if secondary_password is not None else None
-    conn._replace_auth_credential(  # noqa: SLF001
-        _AsyncPkceCredential(provider, username, HiddenString(password), secure_secondary)
-    )
-    return conn
 
 
 # ---------------------------------------------------------------------------
@@ -169,10 +135,10 @@ async def _async_rsts_request(
 
     if not (200 <= status < 300) and status != 203:
         error_message = text.strip() if text.strip() else str(status)
-        raise SafeguardException(
+        raise SafeguardError(
             f"rSTS authentication error: {error_message}",
             status_code=status,
-            response=text,
+            response_body=text,
         )
 
     return text, status
@@ -201,7 +167,7 @@ async def _async_handle_secondary_auth(
         return
 
     if secondary_password is None:
-        raise SafeguardException(
+        raise SafeguardError(
             f"Multi-factor authentication is required (provider: {secondary_provider_id}) "
             "but no secondary password was provided. Pass secondary_password to supply the one-time code."
         )
@@ -236,13 +202,13 @@ async def _async_handle_secondary_auth(
         except (json.JSONDecodeError, TypeError):
             if mfa_text:
                 error_message = mfa_text
-        raise SafeguardException(f"Multi-factor authentication failed: {error_message}")
+        raise SafeguardError(f"Multi-factor authentication failed: {error_message}")
 
     if not (200 <= mfa_status < 300):
-        raise SafeguardException(
+        raise SafeguardError(
             f"Multi-factor authentication failed: {mfa_text}",
             status_code=mfa_status,
-            response=mfa_text,
+            response_body=mfa_text,
         )
 
 
@@ -264,15 +230,15 @@ async def _async_resolve_identity_provider(
     async with session.get(url, headers={"Accept": "application/json"}, ssl=ssl_context, timeout=timeout) as resp:
         if resp.status >= 400:
             text = await resp.text()
-            raise SafeguardException(
+            raise SafeguardError(
                 f"Failed to retrieve authentication providers: {resp.status} {text}",
                 status_code=resp.status,
-                response=text,
+                response_body=text,
             )
         providers: object = await resp.json()
 
     if not isinstance(providers, list):
-        raise SafeguardException("Unexpected response from AuthenticationProviders endpoint")
+        raise SafeguardError("Unexpected response from AuthenticationProviders endpoint")
 
     provider_lower = provider.lower()
 
@@ -295,7 +261,7 @@ async def _async_resolve_identity_provider(
                 return rsts_id
 
     known = [f"{p.get('Name', '?')} ({p.get('RstsProviderId', '?')})" for p in providers if isinstance(p, dict)]
-    raise SafeguardException(f"Unable to find provider matching '{provider}' in [{', '.join(known)}]")
+    raise SafeguardError(f"Unable to find provider matching '{provider}' in [{', '.join(known)}]")
 
 
 async def _async_post_authorization_code(
@@ -318,19 +284,19 @@ async def _async_post_authorization_code(
     async with session.post(url, json=body, headers={"Accept": "application/json"}, ssl=ssl_context, timeout=timeout) as resp:
         if resp.status >= 400:
             text = await resp.text()
-            raise SafeguardException(
+            raise SafeguardError(
                 f"Failed to exchange authorization code: {resp.status} {text}",
                 status_code=resp.status,
-                response=text,
+                response_body=text,
             )
         data: object = await resp.json()
 
     if not isinstance(data, dict):
-        raise SafeguardException("Unexpected response from RSTS token endpoint")
+        raise SafeguardError("Unexpected response from RSTS token endpoint")
 
     access_token = data.get("access_token")
     if not isinstance(access_token, str) or not access_token:
-        raise SafeguardException("RSTS response did not contain an access_token")
+        raise SafeguardError("RSTS response did not contain an access_token")
 
     return access_token
 
@@ -350,22 +316,22 @@ async def _async_post_login_response(
     async with session.post(url, json=body, headers={"Accept": "application/json"}, ssl=ssl_context, timeout=timeout) as resp:
         if resp.status >= 400:
             text = await resp.text()
-            raise SafeguardException(
+            raise SafeguardError(
                 f"Failed to exchange RSTS token: {resp.status} {text}",
                 status_code=resp.status,
-                response=text,
+                response_body=text,
             )
         data: object = await resp.json()
 
     if not isinstance(data, dict):
-        raise SafeguardException("Unexpected response from Token/LoginResponse endpoint")
+        raise SafeguardError("Unexpected response from Token/LoginResponse endpoint")
 
     status = data.get("Status")
     if status != "Success":
-        raise SafeguardException(f"Error exchanging RSTS token, status: {status}")
+        raise SafeguardError(f"Error exchanging RSTS token, status: {status}")
 
     user_token = data.get("UserToken")
     if not isinstance(user_token, str) or not user_token:
-        raise SafeguardException("LoginResponse did not contain a UserToken")
+        raise SafeguardError("LoginResponse did not contain a UserToken")
 
     return user_token
