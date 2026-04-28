@@ -360,7 +360,7 @@ class AsyncSafeguardClient:
         self,
         service: Service,
         endpoint: str,
-        file_or_stream: str | Path | bytes,
+        file_or_stream: str | Path | bytes | typing.IO[bytes],
         *,
         content_type: str = "application/octet-stream",
         params: Mapping[str, str] | None = None,
@@ -373,7 +373,8 @@ class AsyncSafeguardClient:
 
         :param service: The Safeguard service to call.
         :param endpoint: The API endpoint path.
-        :param file_or_stream: A file path or raw ``bytes``.
+        :param file_or_stream: A file path, raw ``bytes``, or an open binary
+            file-like object (e.g. ``io.BytesIO``).
         :param content_type: MIME type (default ``"application/octet-stream"``).
         :returns: The :class:`~aiohttp.ClientResponse`.
         """
@@ -397,8 +398,11 @@ class AsyncSafeguardClient:
         if isinstance(file_or_stream, (str, Path)):
             with open(file_or_stream, "rb") as f:
                 upload_data = f.read()
-        else:
+        elif isinstance(file_or_stream, bytes):
             upload_data = file_or_stream
+        else:
+            # file-like object (IO[bytes])
+            upload_data = file_or_stream.read()
 
         ssl_context = self._create_ssl_context(cert)
         session = await self._get_session()

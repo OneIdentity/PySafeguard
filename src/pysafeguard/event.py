@@ -152,6 +152,25 @@ def _import_hub_builder() -> Any:
         raise SafeguardError("SignalR support requires the 'signalr' extra. Install it with: pip install pysafeguard[signalr]") from exc
 
 
+def _json_hub_protocol() -> Any:
+    """Create a JsonHubProtocol with the correct version.
+
+    signalrcore has a bug where it uses the negotiate response's
+    ``negotiateVersion`` (which describes the negotiate *endpoint* protocol)
+    as the SignalR hub protocol version.  Safeguard appliances return
+    ``negotiateVersion: 0`` but require hub protocol version 1, causing
+    a handshake failure: "The server does not support version 0 of the
+    'json' protocol."
+
+    By explicitly constructing the protocol with ``version=1`` and passing
+    it via ``with_hub_protocol()``, we bypass the broken ProtocolFactory
+    and get a successful handshake.
+    """
+    from signalrcore.protocol.json_hub_protocol import JsonHubProtocol
+
+    return JsonHubProtocol(version=1)
+
+
 # ---------------------------------------------------------------------------
 # Standard event listener
 # ---------------------------------------------------------------------------
@@ -230,7 +249,7 @@ class SafeguardEventListener:
             token = self._access_token
             options["access_token_factory"] = lambda: token
 
-        self._hub = HubConnectionBuilder().with_url(event_url, options=options).build()
+        self._hub = HubConnectionBuilder().with_url(event_url, options=options).with_hub_protocol(_json_hub_protocol()).build()
 
         self._hub.on("NotifyEventAsync", self._on_signalr_event)
         self._hub.on("ReceiveMessage", self._on_signalr_event)

@@ -295,3 +295,98 @@ class TestAsyncUpload:
         finally:
             os.unlink(tmp_path)
             await client.close()
+
+
+class TestAsyncUploadEdgeCases:
+    """Test async upload with file-like objects (IO[bytes])."""
+
+    @pytest.mark.asyncio
+    async def test_upload_from_bytesio(self, spp_host, spp_username, spp_password, spp_verify):
+        """upload() accepts an io.BytesIO object."""
+        import io
+
+        client = AsyncSafeguardClient(
+            spp_host,
+            auth=PasswordAuth("local", spp_username, spp_password),
+            verify=spp_verify,
+        )
+        await client.login()
+        try:
+            stream = io.BytesIO(b"not-a-real-backup-from-bytesio")
+            resp = await client.upload(
+                Service.APPLIANCE,
+                "Backups/Upload",
+                stream,
+                content_type="application/octet-stream",
+            )
+            assert resp.status in (400, 403, 409, 415, 500)
+        finally:
+            await client.close()
+
+    @pytest.mark.asyncio
+    async def test_upload_from_open_file(self, spp_host, spp_username, spp_password, spp_verify):
+        """upload() accepts an open binary file object."""
+        client = AsyncSafeguardClient(
+            spp_host,
+            auth=PasswordAuth("local", spp_username, spp_password),
+            verify=spp_verify,
+        )
+        await client.login()
+
+        with tempfile.NamedTemporaryFile(suffix=".sgb", delete=False) as tmp:
+            tmp.write(b"not-a-real-backup-from-open-file")
+            tmp_path = tmp.name
+
+        try:
+            with open(tmp_path, "rb") as f:
+                resp = await client.upload(
+                    Service.APPLIANCE,
+                    "Backups/Upload",
+                    f,
+                    content_type="application/octet-stream",
+                )
+                assert resp.status in (400, 403, 409, 415, 500)
+        finally:
+            os.unlink(tmp_path)
+            await client.close()
+
+
+class TestAsyncStreamEdgeCases:
+    """Test async streaming edge cases: stream() and download() error handling."""
+
+    @pytest.mark.asyncio
+    async def test_stream_non_existent_endpoint_returns_error(self, spp_host, spp_username, spp_password, spp_verify):
+        """stream() to a non-existent endpoint returns an error status (no crash)."""
+        client = AsyncSafeguardClient(
+            spp_host,
+            auth=PasswordAuth("local", spp_username, spp_password),
+            verify=spp_verify,
+        )
+        await client.login()
+        try:
+            resp = await client.stream(HttpMethod.GET, Service.APPLIANCE, "NonExistentEndpoint/999")
+            assert resp.status >= 400
+            resp.release()
+        finally:
+            await client.close()
+
+    @pytest.mark.asyncio
+    async def test_download_non_existent_raises_api_error(self, spp_host, spp_username, spp_password, spp_verify):
+        """download() to a bad endpoint raises ApiError."""
+        from pysafeguard.errors import ApiError
+
+        client = AsyncSafeguardClient(
+            spp_host,
+            auth=PasswordAuth("local", spp_username, spp_password),
+            verify=spp_verify,
+        )
+        await client.login()
+        try:
+            with pytest.raises(ApiError):
+                await client.download(
+                    Service.APPLIANCE,
+                    "Backups/999999/Download",
+                    "/tmp/should-not-exist.sgb",
+                )
+        finally:
+            await client.close()
