@@ -412,15 +412,26 @@ class PersistentSafeguardEventListener:
         from .client import SafeguardClient
 
         def token_factory() -> str:
+            prev = token_factory._prev_client  # type: ignore[attr-defined]
+            if prev is not None:
+                try:
+                    prev.logout()
+                    prev.close()
+                except Exception:
+                    pass
             client = SafeguardClient(host, auth=PasswordAuth(provider, username, password), verify=verify)
             try:
                 client.login()
                 token = client.user_token
                 if token is None:
                     raise SafeguardError("Authentication succeeded but no token was returned")
+                token_factory._prev_client = client  # type: ignore[attr-defined]
                 return token
-            finally:
+            except Exception:
                 client.close()
+                raise
+
+        token_factory._prev_client = None  # type: ignore[attr-defined]
 
         return cls(host, token_factory, verify, **kwargs)
 
@@ -447,15 +458,26 @@ class PersistentSafeguardEventListener:
         from .client import SafeguardClient
 
         def token_factory() -> str:
+            prev = token_factory._prev_client  # type: ignore[attr-defined]
+            if prev is not None:
+                try:
+                    prev.logout()
+                    prev.close()
+                except Exception:
+                    pass
             client = SafeguardClient(host, auth=CertificateAuth(cert_file, key_file, provider), verify=verify)
             try:
                 client.login()
                 token = client.user_token
                 if token is None:
                     raise SafeguardError("Authentication succeeded but no token was returned")
+                token_factory._prev_client = client  # type: ignore[attr-defined]
                 return token
-            finally:
+            except Exception:
                 client.close()
+                raise
+
+        token_factory._prev_client = None  # type: ignore[attr-defined]
 
         return cls(host, token_factory, verify, **kwargs)
 
@@ -506,6 +528,16 @@ class PersistentSafeguardEventListener:
             if self._listener is not None:
                 self._listener.stop()
                 self._listener = None
+
+        # Logout the last token produced by the factory (best-effort).
+        prev = getattr(self._token_factory, "_prev_client", None)
+        if prev is not None:
+            try:
+                prev.logout()
+                prev.close()
+            except Exception:
+                pass
+            self._token_factory._prev_client = None  # type: ignore[attr-defined]
 
         self._fire_state(EventListenerState.STOPPED)
 
