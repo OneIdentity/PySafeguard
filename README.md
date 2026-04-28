@@ -12,7 +12,7 @@ One Identity Safeguard Python SDK
 -----------
 
 <p align="center">
-<i>Check out our <a href="samples">sample projects</a> to get started with your own custom integration to Safeguard!</i>
+<i>Check out our <a href="https://github.com/OneIdentity/PySafeguard/tree/main/samples">sample projects</a> to get started with your own custom integration to Safeguard!</i>
 </p>
 
 -----------
