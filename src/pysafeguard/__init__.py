@@ -1,7 +1,10 @@
 """PySafeguard — Python SDK for One Identity Safeguard Web API."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 # Client
-from .async_client import AsyncSafeguardClient as AsyncSafeguardClient
 from .client import SafeguardClient as SafeguardClient
 
 # Auth strategies
@@ -27,7 +30,6 @@ from .data_types import SshKeyFormat as SshKeyFormat
 
 # A2A
 from .a2a import A2AContext as A2AContext
-from .async_a2a import AsyncA2AContext as AsyncA2AContext
 
 # Events
 from .event import EventHandlerRegistry as EventHandlerRegistry
@@ -39,6 +41,40 @@ from .event import SafeguardStateCallback as SafeguardStateCallback
 
 # Types
 from .hidden_string import HiddenString as HiddenString
+
+if TYPE_CHECKING:
+    from .async_a2a import AsyncA2AContext as AsyncA2AContext
+    from .async_client import AsyncSafeguardClient as AsyncSafeguardClient
+
+# Lazy imports for optional async dependencies (aiohttp).
+# These are resolved on first access so that ``import pysafeguard``
+# works without the ``[async]`` extra installed.
+_ASYNC_LAZY_IMPORTS: dict[str, tuple[str, str]] = {
+    "AsyncSafeguardClient": (".async_client", "AsyncSafeguardClient"),
+    "AsyncA2AContext": (".async_a2a", "AsyncA2AContext"),
+}
+
+
+def __getattr__(name: str) -> object:
+    if name in _ASYNC_LAZY_IMPORTS:
+        module_path, attr = _ASYNC_LAZY_IMPORTS[name]
+        try:
+            import importlib
+
+            mod = importlib.import_module(module_path, __name__)
+            value = getattr(mod, attr)
+            globals()[name] = value
+            return value
+        except ImportError as exc:
+            if "aiohttp" in str(exc) or "multidict" in str(exc):
+                raise ImportError(f"{name} requires the 'async' extra. Install it with: pip install pysafeguard[async]") from exc
+            raise
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return sorted(set(list(globals().keys()) + list(_ASYNC_LAZY_IMPORTS.keys())))
+
 
 __all__ = [
     # Client
