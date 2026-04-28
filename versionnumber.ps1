@@ -3,8 +3,6 @@ Param(
     [Parameter(Mandatory=$true)]
     [string]$BuildId,
     [Parameter(Mandatory=$true)]
-    [string]$IsPrerelease,
-    [Parameter(Mandatory=$true)]
     [string]$TagName,
     [Parameter(Mandatory=$true)]
     [string]$IsTagBuild
@@ -12,14 +10,10 @@ Param(
 
 # Read the semantic version from pyproject.toml (single source of truth)
 $local:SemanticVersion = (poetry version --short).Trim()
-
-# Convert string parameters from Azure Pipelines to proper types
-$local:IsPrereleaseBool = $IsPrerelease -eq "True" -or $IsPrerelease -eq "true" -or $IsPrerelease -eq "1"
 $local:IsTagBuildBool = $IsTagBuild -eq "True" -or $IsTagBuild -eq "true" -or $IsTagBuild -eq "1"
 
 Write-Host "SemanticVersion = $($local:SemanticVersion)"
 Write-Host "BuildId = $BuildId"
-Write-Host "IsPrerelease = $($local:IsPrereleaseBool)"
 Write-Host "TagName = $TagName"
 Write-Host "IsTagBuild = $($local:IsTagBuildBool)"
 
@@ -28,14 +22,11 @@ if ($local:IsTagBuildBool) {
     $local:PackageVersion = $TagName
     Write-Host "Tag build detected, using tag name as version"
 }
-elseif ($local:IsPrereleaseBool) {
-    # Prerelease builds get a .devN suffix
+else {
+    # Non-tag builds get a .devN suffix for unique artifact versioning
     $local:BuildNumber = $BuildId % 65534
     $local:PackageVersion = "${local:SemanticVersion}.dev${local:BuildNumber}"
-    Write-Host "Prerelease build, BuildNumber = $($local:BuildNumber)"
-}
-else {
-    $local:PackageVersion = $local:SemanticVersion
+    Write-Host "Dev build, BuildNumber = $($local:BuildNumber)"
 }
 
 Write-Host "PackageVersion = $($local:PackageVersion)"
