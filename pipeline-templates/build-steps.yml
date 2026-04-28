@@ -17,7 +17,7 @@ steps:
     filePath: $(System.DefaultWorkingDirectory)/versionnumber.ps1
     arguments: >
       -BuildId $(Build.BuildId)
-      -IsPrerelease $$$(isPrerelease)
+      -IsPrerelease $(isPrerelease)
       -TagName $(Build.SourceBranchName)
       -IsTagBuild $(isTagBuild)
 
