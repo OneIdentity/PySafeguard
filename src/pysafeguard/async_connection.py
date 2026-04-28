@@ -3,6 +3,7 @@ import ssl
 import typing
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from aiohttp import ClientResponse, ClientSession, ClientTimeout
 from multidict import CIMultiDict
@@ -14,6 +15,7 @@ from .hidden_string import HiddenString
 from .utility import JsonType, LiteralString, assemble_path, assemble_url, get_access_token, get_user_token
 
 DEFAULT_TIMEOUT = 300
+DEFAULT_STREAM_CHUNK_SIZE = 8192
 
 
 # ---------------------------------------------------------------------------
@@ -389,3 +391,164 @@ class AsyncConnection:
             return int(remaining, base=10)
         else:
             return None
+
+    # -- Streaming -----------------------------------------------------------
+
+    async def invoke_stream(
+        self,
+        httpMethod: HttpMethods,
+        httpService: Services,
+        endpoint: str | None = None,
+        query: Mapping[str, str] = {},
+        body: JsonType | None = None,
+        additionalHeaders: Mapping[str, str] = {},
+        host: str | None = None,
+        cert: tuple[str, str] | None = None,
+        apiVersion: str | None = None,
+    ) -> ClientResponse:
+        """Invoke an API request with streaming enabled.
+
+        Like :meth:`invoke`, but the response body is **not** eagerly
+        read into memory.  Use :meth:`~aiohttp.ClientResponse.content`
+        to consume the body incrementally::
+
+            resp = await conn.invoke_stream(HttpMethods.GET, Services.CORE, "Reports/Download")
+            async for chunk in resp.content.iter_chunked(8192):
+                f.write(chunk)
+            resp.release()
+
+        The caller is responsible for releasing the response.
+
+        :returns: A streaming :class:`~aiohttp.ClientResponse`.
+        """
+        if self._auto_refresh and httpService not in (Services.RSTS, Services.APPLIANCE):
+            await self._check_and_refresh_token()
+
+        url = assemble_url(
+            host or self.host or "",
+            assemble_path(
+                httpService,
+                (apiVersion or self.apiVersion) if httpService != Services.RSTS else "",
+                endpoint,
+            ),
+            query,
+        )
+        headers = CIMultiDict(self.headers)
+        headers.update(additionalHeaders)
+        return await self._execute_web_request_stream(httpMethod, url, body, headers, cert=cert)
+
+    async def download(
+        self,
+        httpService: Services,
+        endpoint: str,
+        file_path: str | Path,
+        *,
+        query: Mapping[str, str] = {},
+        additionalHeaders: Mapping[str, str] = {},
+        host: str | None = None,
+        cert: tuple[str, str] | None = None,
+        apiVersion: str | None = None,
+        chunk_size: int = DEFAULT_STREAM_CHUNK_SIZE,
+    ) -> int:
+        """Download a response body to a file.
+
+        :param httpService: The Safeguard service to call.
+        :param endpoint: The API endpoint path.
+        :param file_path: Destination file path (will be created/overwritten).
+        :param chunk_size: Size of each streamed chunk in bytes (default 8192).
+        :returns: The number of bytes written.
+        """
+        resp = await self.invoke_stream(
+            HttpMethods.GET,
+            httpService,
+            endpoint,
+            query=query,
+            additionalHeaders=additionalHeaders,
+            host=host,
+            cert=cert,
+            apiVersion=apiVersion,
+        )
+        if resp.status != 200:
+            await resp.read()
+            raise AsyncWebRequestError(resp)
+
+        written = 0
+        try:
+            with open(file_path, "wb") as f:
+                async for chunk in resp.content.iter_chunked(chunk_size):
+                    f.write(chunk)
+                    written += len(chunk)
+        finally:
+            resp.release()
+        return written
+
+    async def upload(
+        self,
+        httpService: Services,
+        endpoint: str,
+        file_or_stream: str | Path | bytes,
+        *,
+        content_type: str = "application/octet-stream",
+        query: Mapping[str, str] = {},
+        additionalHeaders: Mapping[str, str] = {},
+        host: str | None = None,
+        cert: tuple[str, str] | None = None,
+        apiVersion: str | None = None,
+    ) -> ClientResponse:
+        """Upload a file or bytes to the Safeguard API.
+
+        :param httpService: The Safeguard service to call.
+        :param endpoint: The API endpoint path.
+        :param file_or_stream: A file path (``str``/``Path``) or raw ``bytes``.
+        :param content_type: The MIME type of the upload (default
+            ``"application/octet-stream"``).
+        :returns: The API :class:`~aiohttp.ClientResponse`.
+        """
+        if self._auto_refresh and httpService not in (Services.RSTS, Services.APPLIANCE):
+            await self._check_and_refresh_token()
+
+        url = assemble_url(
+            host or self.host or "",
+            assemble_path(
+                httpService,
+                (apiVersion or self.apiVersion) if httpService != Services.RSTS else "",
+                endpoint,
+            ),
+            query,
+        )
+        headers = CIMultiDict(self.headers)
+        headers.update(additionalHeaders)
+        headers["content-type"] = content_type
+
+        if isinstance(file_or_stream, (str, Path)):
+            with open(file_or_stream, "rb") as f:
+                data = f.read()
+        else:
+            data = file_or_stream
+
+        ssl_context = self._create_ssl_context(cert)
+        session = await self._get_session()
+        resp = await session.request(HttpMethods.POST, url, headers=headers, ssl=ssl_context, data=data, timeout=self._timeout)
+        await resp.read()
+        return resp
+
+    async def _execute_web_request_stream(
+        self, httpMethod: HttpMethods, url: str, body: JsonType | str | None, headers: Mapping[str, str], cert: tuple[str, str] | None = None
+    ) -> ClientResponse:
+        """Like _execute_web_request but does NOT read the response body."""
+        data_body: str | None
+        json_body: JsonType | None
+        updated_headers = CIMultiDict(headers)
+        if body and httpMethod in (HttpMethods.POST, HttpMethods.PUT) and not headers.get("content-type"):
+            data_body = None
+            json_body = body
+            updated_headers["content-type"] = "application/json"
+        else:
+            if body is not None and not isinstance(body, str):
+                raise TypeError("expected: body as a string")
+            data_body = body
+            json_body = None
+
+        ssl_context = self._create_ssl_context(cert)
+        session = await self._get_session()
+        return await session.request(httpMethod, url, headers=updated_headers, ssl=ssl_context, data=data_body, json=json_body, timeout=self._timeout)

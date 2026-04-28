@@ -2,8 +2,9 @@ import json
 import typing
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 from types import TracebackType
-from typing import TYPE_CHECKING
+from typing import IO, TYPE_CHECKING
 
 from requests import Response, Session
 from requests.structures import CaseInsensitiveDict
@@ -15,6 +16,8 @@ from .utility import JsonType, LiteralString, assemble_path, assemble_url, get_a
 
 if TYPE_CHECKING:
     from .event import PersistentSafeguardEventListener, SafeguardEventListener
+
+DEFAULT_STREAM_CHUNK_SIZE = 8192
 
 DEFAULT_TIMEOUT = 300
 
@@ -423,3 +426,158 @@ class Connection:
             return int(remaining, base=10)
         else:
             return None
+
+    # -- Streaming -----------------------------------------------------------
+
+    def invoke_stream(
+        self,
+        httpMethod: HttpMethods,
+        httpService: Services,
+        endpoint: str | None = None,
+        query: Mapping[str, str] = {},
+        body: JsonType | None = None,
+        additionalHeaders: Mapping[str, str] = {},
+        host: str | None = None,
+        cert: tuple[str, str] | None = None,
+        apiVersion: str | None = None,
+    ) -> Response:
+        """Invoke an API request with streaming enabled.
+
+        Like :meth:`invoke`, but the response body is **not** read into
+        memory.  Use :meth:`~requests.Response.iter_content` or
+        :meth:`~requests.Response.iter_lines` to consume the body
+        incrementally.
+
+        The caller is responsible for closing the response (or use it
+        as a context manager)::
+
+            resp = conn.invoke_stream(HttpMethods.GET, Services.CORE, "Reports/Download")
+            with resp:
+                for chunk in resp.iter_content(chunk_size=8192):
+                    f.write(chunk)
+
+        :returns: A streaming :class:`~requests.Response`.
+        """
+        if self._auto_refresh and httpService not in (Services.RSTS, Services.APPLIANCE):
+            self._check_and_refresh_token()
+
+        url = assemble_url(
+            host or self.host or "",
+            assemble_path(
+                httpService,
+                (apiVersion or self.apiVersion) if httpService != Services.RSTS else "",
+                endpoint,
+            ),
+            query,
+        )
+        headers = CaseInsensitiveDict(self.headers)
+        headers.update(additionalHeaders)
+        return self._execute_web_request_stream(httpMethod, url, body, headers, cert=cert)
+
+    def download(
+        self,
+        httpService: Services,
+        endpoint: str,
+        file_path: str | Path,
+        *,
+        query: Mapping[str, str] = {},
+        additionalHeaders: Mapping[str, str] = {},
+        host: str | None = None,
+        cert: tuple[str, str] | None = None,
+        apiVersion: str | None = None,
+        chunk_size: int = DEFAULT_STREAM_CHUNK_SIZE,
+    ) -> int:
+        """Download a response body to a file.
+
+        :param httpService: The Safeguard service to call.
+        :param endpoint: The API endpoint path.
+        :param file_path: Destination file path (will be created/overwritten).
+        :param chunk_size: Size of each streamed chunk in bytes (default 8192).
+        :returns: The number of bytes written.
+        """
+        resp = self.invoke_stream(
+            HttpMethods.GET,
+            httpService,
+            endpoint,
+            query=query,
+            additionalHeaders=additionalHeaders,
+            host=host,
+            cert=cert,
+            apiVersion=apiVersion,
+        )
+        if resp.status_code != 200:
+            resp.close()
+            raise WebRequestError(resp)
+
+        written = 0
+        with resp, open(file_path, "wb") as f:
+            for chunk in resp.iter_content(chunk_size=chunk_size):
+                f.write(chunk)
+                written += len(chunk)
+        return written
+
+    def upload(
+        self,
+        httpService: Services,
+        endpoint: str,
+        file_or_stream: str | Path | IO[bytes],
+        *,
+        content_type: str = "application/octet-stream",
+        query: Mapping[str, str] = {},
+        additionalHeaders: Mapping[str, str] = {},
+        host: str | None = None,
+        cert: tuple[str, str] | None = None,
+        apiVersion: str | None = None,
+    ) -> Response:
+        """Upload a file or stream to the Safeguard API.
+
+        :param httpService: The Safeguard service to call.
+        :param endpoint: The API endpoint path.
+        :param file_or_stream: A file path (``str``/``Path``) or an open
+            binary file-like object.
+        :param content_type: The MIME type of the upload (default
+            ``"application/octet-stream"``).
+        :returns: The API :class:`~requests.Response`.
+        """
+        if self._auto_refresh and httpService not in (Services.RSTS, Services.APPLIANCE):
+            self._check_and_refresh_token()
+
+        url = assemble_url(
+            host or self.host or "",
+            assemble_path(
+                httpService,
+                (apiVersion or self.apiVersion) if httpService != Services.RSTS else "",
+                endpoint,
+            ),
+            query,
+        )
+        headers = CaseInsensitiveDict(self.headers)
+        headers.update(additionalHeaders)
+        headers["content-type"] = content_type
+
+        if isinstance(file_or_stream, (str, Path)):
+            with open(file_or_stream, "rb") as f:
+                return self._session.request(HttpMethods.POST, url, headers=dict(headers), cert=cert, data=f, timeout=self._timeout)
+        else:
+            return self._session.request(HttpMethods.POST, url, headers=dict(headers), cert=cert, data=file_or_stream, timeout=self._timeout)
+
+    def _execute_web_request_stream(
+        self, httpMethod: HttpMethods, url: str, body: JsonType | str | None, headers: Mapping[str, str], cert: tuple[str, str] | None = None
+    ) -> Response:
+        """Like _execute_web_request but with ``stream=True``."""
+        data_body: str | None
+        json_body: JsonType | None
+        updated_headers = CaseInsensitiveDict(headers)
+        if body and httpMethod in (HttpMethods.POST, HttpMethods.PUT) and not headers.get("content-type"):
+            data_body = None
+            json_body = body
+            updated_headers["content-type"] = "application/json"
+        else:
+            if body is not None and not isinstance(body, str):
+                raise TypeError("expected: body as a string")
+            data_body = body
+            json_body = None
+
+        return self._session.request(
+            httpMethod, url, headers=dict(updated_headers), cert=cert, data=data_body, json=json_body, timeout=self._timeout, stream=True
+        )
