@@ -1,10 +1,100 @@
 """Integration test fixtures — shared authenticated connections for live-appliance tests."""
 
+from __future__ import annotations
+
 import uuid
 
 import pytest
 
-from pysafeguard import AsyncSafeguardClient, PasswordAuth, SafeguardClient, Service
+from pysafeguard import AsyncSafeguardClient, PasswordAuth, PkceAuth, SafeguardClient, Service
+
+_ROG_SETTING_NAME = "Allowed OAuth2 Grant Types"
+
+
+# ---------------------------------------------------------------------------
+# Preflight: ensure Resource Owner Grant is enabled
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _ensure_resource_owner_grant(spp_host, spp_username, spp_password, spp_verify):
+    """Check that the Resource Owner password grant is enabled on the appliance.
+
+    Modern SPP versions (8.0+) may ship with the Resource Owner grant disabled.
+    If disabled, this fixture uses PKCE (which does not require ROG) to
+    authenticate, enables the grant via the Settings API, runs the test
+    session, then restores the original setting.
+
+    This matches the preflight pattern used by SafeguardDotNet and safeguard-ps.
+    """
+    if not spp_host:
+        yield
+        return
+
+    # Probe: try PasswordAuth login
+    probe = SafeguardClient(spp_host, auth=PasswordAuth("local", spp_username, spp_password), verify=spp_verify)
+    try:
+        probe.login()
+        probe.close()
+        # ROG is enabled — nothing to do
+        yield
+        return
+    except Exception:
+        probe.close()
+        # ROG may be disabled — attempt PKCE remediation
+
+    # Remediate: use PKCE to log in and enable ROG
+    original_value: str | None = None
+    setting_id: str | None = None
+    try:
+        pkce_client = SafeguardClient(spp_host, auth=PkceAuth("local", spp_username, spp_password), verify=spp_verify)
+        pkce_client.login()
+
+        resp = pkce_client.get(Service.CORE, "Settings")
+        settings = resp.json()
+        for s in settings:
+            if s.get("Name") == _ROG_SETTING_NAME:
+                original_value = s.get("Value", "")
+                setting_id = s.get("Name")
+                break
+
+        if setting_id is None:
+            pkce_client.close()
+            pytest.exit(f"Could not find '{_ROG_SETTING_NAME}' in appliance settings — cannot enable ROG", returncode=1)
+
+        grant_types = [g.strip() for g in original_value.split(",") if g.strip()] if original_value else []
+        if not any(g.lower() == "resourceowner" for g in grant_types):
+            grant_types.append("ResourceOwner")
+            new_value = ", ".join(grant_types)
+            pkce_client.put(Service.CORE, f"Settings/{_ROG_SETTING_NAME}", json={"Value": new_value})
+            print(f"\n[preflight] Enabled Resource Owner grant (was: '{original_value}')")
+        else:
+            # ROG is in the setting but PasswordAuth still failed — different problem
+            pkce_client.close()
+            pytest.exit(
+                "Resource Owner grant is listed in settings but PasswordAuth login failed. Check credentials or appliance configuration.",
+                returncode=1,
+            )
+
+        pkce_client.close()
+    except SystemExit:
+        raise
+    except Exception as exc:
+        pytest.exit(f"Failed to enable Resource Owner grant via PKCE: {exc}", returncode=1)
+
+    # Run the test session
+    yield
+
+    # Restore: put the original setting back
+    if original_value is not None:
+        try:
+            restore_client = SafeguardClient(spp_host, auth=PkceAuth("local", spp_username, spp_password), verify=spp_verify)
+            restore_client.login()
+            restore_client.put(Service.CORE, f"Settings/{_ROG_SETTING_NAME}", json={"Value": original_value})
+            restore_client.close()
+            print(f"\n[preflight] Restored Resource Owner grant setting to: '{original_value}'")
+        except Exception as exc:
+            print(f"\n[preflight] Warning: failed to restore ROG setting: {exc}")
 
 
 @pytest.fixture()
