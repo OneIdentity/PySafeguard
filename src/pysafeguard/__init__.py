@@ -3,6 +3,8 @@
 
 import warnings
 
+from .a2a import A2AContext as A2AContext
+from .async_a2a import AsyncA2AContext as AsyncA2AContext
 from .async_connection import AsyncConnection as AsyncConnection
 from .async_pkce import async_connect_pkce as async_connect_pkce
 from .async_pkce import async_get_pkce_token as async_get_pkce_token
