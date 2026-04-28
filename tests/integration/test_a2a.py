@@ -79,7 +79,7 @@ def a2a_env(spp_host, spp_username, spp_password, spp_verify):
         Service.CORE,
         "Users",
         json={
-            "Name": "PySgA2ATestAdmin",
+            "Name": "PySg_A2ATestAdmin",
             "IdentityProvider": {"Id": -1},
             "PrimaryAuthenticationProvider": {"Id": -1},
             "AdminRoles": [
@@ -96,7 +96,7 @@ def a2a_env(spp_host, spp_username, spp_password, spp_verify):
     env.test_admin_id = r.json()["Id"]
     env.admin_client.put(Service.CORE, f"Users/{env.test_admin_id}/Password", json="A2ATestAdmin1!")
 
-    env.test_admin_client = SafeguardClient(spp_host, auth=PasswordAuth("local", "PySgA2ATestAdmin", "A2ATestAdmin1!"), verify=spp_verify)
+    env.test_admin_client = SafeguardClient(spp_host, auth=PasswordAuth("local", "PySg_A2ATestAdmin", "A2ATestAdmin1!"), verify=spp_verify)
     env.test_admin_client.login()
 
     # --- generate self-signed client certificate ---
@@ -118,7 +118,7 @@ def a2a_env(spp_host, spp_username, spp_password, spp_verify):
             "1",
             "-nodes",
             "-subj",
-            "/CN=PySafeguardA2ATest",
+            "/CN=PySg_A2ATestCert",
         ],
         capture_output=True,
         check=True,
@@ -137,7 +137,7 @@ def a2a_env(spp_host, spp_username, spp_password, spp_verify):
         Service.CORE,
         "Users",
         json={
-            "Name": "PySgA2ACertUser",
+            "Name": "PySg_A2ACertUser",
             "PrimaryAuthenticationProvider": {"Id": -2, "Identity": env.thumbprint},
             "AdminRoles": ["Auditor"],
         },
@@ -150,7 +150,7 @@ def a2a_env(spp_host, spp_username, spp_password, spp_verify):
         Service.CORE,
         "Assets",
         json={
-            "Name": "PySgA2ATestAsset",
+            "Name": "PySg_A2ATestAsset",
             "NetworkAddress": "127.0.0.1",
             "PlatformId": 501,
             "AssetPartitionId": -1,
@@ -163,7 +163,7 @@ def a2a_env(spp_host, spp_username, spp_password, spp_verify):
     r = c.post(
         Service.CORE,
         "AssetAccounts",
-        json={"Name": "a2a_testacct", "Asset": {"Id": env.asset_id}},
+        json={"Name": "PySg_a2a_testacct", "Asset": {"Id": env.asset_id}},
     )
     assert r.status_code == 201, f"Create account failed: {r.text[:300]}"
     env.account_id = r.json()["Id"]
@@ -176,7 +176,7 @@ def a2a_env(spp_host, spp_username, spp_password, spp_verify):
     r = c.post(
         Service.CORE,
         "A2ARegistrations",
-        json={"AppName": "PySgA2ATest", "CertificateUserId": env.cert_user_id},
+        json={"AppName": "PySg_A2ATest", "CertificateUserId": env.cert_user_id},
     )
     assert r.status_code == 201, f"Create A2A reg failed: {r.text[:300]}"
     env.reg_id = r.json()["Id"]

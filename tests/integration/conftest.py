@@ -33,9 +33,14 @@ async def async_connection(spp_host, spp_username, spp_password, spp_verify):
 
 @pytest.fixture()
 def unique_name():
-    """Generate a unique name for test resources to prevent collisions."""
+    """Generate a unique name for test resources to prevent collisions.
+
+    All test-created objects use a ``PySg_`` prefix so they are easily
+    recognizable on a shared appliance (consistent with safeguard-ps,
+    safeguarddotnet, safeguardjava, and safeguard-bash conventions).
+    """
     short_id = uuid.uuid4().hex[:8]
-    return f"PyTest_{short_id}"
+    return f"PySg_{short_id}"
 
 
 def delete_user_sync(client, user_id):
