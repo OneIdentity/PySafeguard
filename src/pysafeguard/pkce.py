@@ -177,35 +177,14 @@ def _handle_secondary_auth(
     secondary_password: str | None,
 ) -> None:
     """Handle MFA if the primary auth response indicates a secondary provider."""
-    try:
-        primary_data: object = json.loads(primary_resp.text)
-    except (json.JSONDecodeError, TypeError):
-        return  # Non-JSON response means no secondary auth info
-
-    if not isinstance(primary_data, dict):
+    if _check_secondary_required(primary_resp.text, secondary_password) is None:
         return
 
-    secondary_provider_id = primary_data.get("SecondaryProviderID")
-    if not secondary_provider_id:
-        return
-
-    if secondary_password is None:
-        raise SafeguardError(
-            f"Multi-factor authentication is required (provider: {secondary_provider_id}) "
-            "but no secondary password was provided. Pass secondary_password to supply the one-time code."
-        )
+    assert secondary_password is not None  # validated by _check_secondary_required
 
     # Step 7: Initialize secondary provider
     init_resp = _rsts_request(session, pkce_base_url + _STEP_SECONDARY_INIT, form_data)
-
-    mfa_state = ""
-    if init_resp.status_code in (200, 203):
-        try:
-            init_data: object = json.loads(init_resp.text)
-            if isinstance(init_data, dict):
-                mfa_state = str(init_data.get("State", ""))
-        except (json.JSONDecodeError, TypeError):
-            pass
+    mfa_state = _extract_mfa_state(init_resp.text, init_resp.status_code)
 
     # Step 5: Submit secondary authentication
     mfa_form_data = {
@@ -215,30 +194,120 @@ def _handle_secondary_auth(
     }
 
     mfa_resp = _rsts_request(session, pkce_base_url + _STEP_SECONDARY_AUTH, mfa_form_data)
-
-    # Step 5 returns empty on success, or 203 with error details on failure
-    if mfa_resp.status_code == 203:
-        error_message = "Secondary authentication failed."
-        try:
-            mfa_data: object = json.loads(mfa_resp.text)
-            if isinstance(mfa_data, dict) and "Message" in mfa_data:
-                error_message = str(mfa_data["Message"])
-        except (json.JSONDecodeError, TypeError):
-            if mfa_resp.text:
-                error_message = mfa_resp.text
-        raise SafeguardError(f"Multi-factor authentication failed: {error_message}")
-
-    if not (200 <= mfa_resp.status_code < 300):
-        raise SafeguardError(
-            f"Multi-factor authentication failed: {mfa_resp.text}",
-            status_code=mfa_resp.status_code,
-            response_body=mfa_resp.text,
-        )
+    _check_mfa_result(mfa_resp.text, mfa_resp.status_code)
 
 
 # ---------------------------------------------------------------------------
 # Authorization code and token exchange
 # ---------------------------------------------------------------------------
+
+
+def _match_provider(providers: list[object], provider: str) -> str:
+    """Match a provider name/ID against a list of provider dicts.
+
+    Tries: exact RstsProviderId, then exact Name, then substring of
+    RstsProviderId (all case-insensitive).
+
+    :param providers: List of provider dicts from AuthenticationProviders API.
+    :param provider: User-supplied provider name or ID to match.
+    :returns: The matched RstsProviderId string.
+    :raises SafeguardError: If no match is found.
+    """
+    provider_lower = provider.lower()
+
+    for p in providers:
+        if isinstance(p, dict):
+            rsts_id = str(p.get("RstsProviderId", ""))
+            if rsts_id.lower() == provider_lower:
+                return rsts_id
+
+    for p in providers:
+        if isinstance(p, dict):
+            name = str(p.get("Name", ""))
+            if name.lower() == provider_lower:
+                return str(p.get("RstsProviderId", ""))
+
+    for p in providers:
+        if isinstance(p, dict):
+            rsts_id = str(p.get("RstsProviderId", ""))
+            if provider_lower in rsts_id.lower():
+                return rsts_id
+
+    known = [f"{p.get('Name', '?')} ({p.get('RstsProviderId', '?')})" for p in providers if isinstance(p, dict)]
+    raise SafeguardError(f"Unable to find provider matching '{provider}' in [{', '.join(known)}]")
+
+
+def _check_secondary_required(primary_resp_text: str, secondary_password: str | None) -> str | None:
+    """Check if MFA is required from the primary auth response.
+
+    :param primary_resp_text: The response body text from primary authentication.
+    :param secondary_password: The user-supplied secondary password, or ``None``.
+    :returns: The secondary provider ID if MFA is required, or ``None``.
+    :raises SafeguardError: If MFA is required but no secondary password was provided.
+    """
+    try:
+        primary_data: object = json.loads(primary_resp_text)
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+    if not isinstance(primary_data, dict):
+        return None
+
+    secondary_provider_id = primary_data.get("SecondaryProviderID")
+    if not secondary_provider_id:
+        return None
+
+    if secondary_password is None:
+        raise SafeguardError(
+            f"Multi-factor authentication is required (provider: {secondary_provider_id}) "
+            "but no secondary password was provided. Pass secondary_password to supply the one-time code."
+        )
+
+    return str(secondary_provider_id)
+
+
+def _extract_mfa_state(init_text: str, init_status: int) -> str:
+    """Extract the MFA state token from a secondary init response.
+
+    :param init_text: Response body from the secondary init step.
+    :param init_status: HTTP status code from the secondary init step.
+    :returns: The MFA state string, or empty string if not available.
+    """
+    mfa_state = ""
+    if init_status in (200, 203):
+        try:
+            init_data: object = json.loads(init_text)
+            if isinstance(init_data, dict):
+                mfa_state = str(init_data.get("State", ""))
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return mfa_state
+
+
+def _check_mfa_result(mfa_text: str, mfa_status: int) -> None:
+    """Validate the MFA authentication response.
+
+    :param mfa_text: Response body from the secondary auth step.
+    :param mfa_status: HTTP status code from the secondary auth step.
+    :raises SafeguardError: If MFA authentication failed.
+    """
+    if mfa_status == 203:
+        error_message = "Secondary authentication failed."
+        try:
+            mfa_data: object = json.loads(mfa_text)
+            if isinstance(mfa_data, dict) and "Message" in mfa_data:
+                error_message = str(mfa_data["Message"])
+        except (json.JSONDecodeError, TypeError):
+            if mfa_text:
+                error_message = mfa_text
+        raise SafeguardError(f"Multi-factor authentication failed: {error_message}")
+
+    if not (200 <= mfa_status < 300):
+        raise SafeguardError(
+            f"Multi-factor authentication failed: {mfa_text}",
+            status_code=mfa_status,
+            response_body=mfa_text,
+        )
 
 
 def _extract_authorization_code(response_body: str) -> str:
@@ -283,31 +352,7 @@ def _resolve_identity_provider(session: Session, appliance: str, api_version: st
     if not isinstance(providers, list):
         raise SafeguardError("Unexpected response from AuthenticationProviders endpoint")
 
-    provider_lower = provider.lower()
-
-    # Match by exact RstsProviderId (case-insensitive)
-    for p in providers:
-        if isinstance(p, dict):
-            rsts_id = str(p.get("RstsProviderId", ""))
-            if rsts_id.lower() == provider_lower:
-                return rsts_id
-
-    # Match by exact Name (case-insensitive)
-    for p in providers:
-        if isinstance(p, dict):
-            name = str(p.get("Name", ""))
-            if name.lower() == provider_lower:
-                return str(p.get("RstsProviderId", ""))
-
-    # Match by substring of RstsProviderId (case-insensitive)
-    for p in providers:
-        if isinstance(p, dict):
-            rsts_id = str(p.get("RstsProviderId", ""))
-            if provider_lower in rsts_id.lower():
-                return rsts_id
-
-    known = [f"{p.get('Name', '?')} ({p.get('RstsProviderId', '?')})" for p in providers if isinstance(p, dict)]
-    raise SafeguardError(f"Unable to find provider matching '{provider}' in [{', '.join(known)}]")
+    return _match_provider(providers, provider)
 
 
 def _post_authorization_code(session: Session, appliance: str, code: str, code_verifier: str) -> str:

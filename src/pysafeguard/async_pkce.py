@@ -6,7 +6,6 @@ browser-based OAuth2/PKCE flow using ``aiohttp`` instead of ``requests``.
 
 from __future__ import annotations
 
-import json
 import ssl
 
 from aiohttp import ClientSession, ClientTimeout, CookieJar
@@ -21,10 +20,14 @@ from .pkce import (
     _STEP_PRIMARY_AUTH,
     _STEP_SECONDARY_AUTH,
     _STEP_SECONDARY_INIT,
+    _check_mfa_result,
+    _check_secondary_required,
     _extract_authorization_code,
+    _extract_mfa_state,
     _generate_code_challenge,
     _generate_code_verifier,
     _generate_csrf_token,
+    _match_provider,
 )
 
 
@@ -154,35 +157,14 @@ async def _async_handle_secondary_auth(
     timeout: ClientTimeout,
 ) -> None:
     """Handle MFA if the primary auth response indicates a secondary provider."""
-    try:
-        primary_data: object = json.loads(primary_resp_text)
-    except (json.JSONDecodeError, TypeError):
+    if _check_secondary_required(primary_resp_text, secondary_password) is None:
         return
 
-    if not isinstance(primary_data, dict):
-        return
-
-    secondary_provider_id = primary_data.get("SecondaryProviderID")
-    if not secondary_provider_id:
-        return
-
-    if secondary_password is None:
-        raise SafeguardError(
-            f"Multi-factor authentication is required (provider: {secondary_provider_id}) "
-            "but no secondary password was provided. Pass secondary_password to supply the one-time code."
-        )
+    assert secondary_password is not None  # validated by _check_secondary_required
 
     # Step 7: Initialize secondary provider
     init_text, init_status = await _async_rsts_request(session, pkce_base_url + _STEP_SECONDARY_INIT, form_data, ssl_context, timeout)
-
-    mfa_state = ""
-    if init_status in (200, 203):
-        try:
-            init_data: object = json.loads(init_text)
-            if isinstance(init_data, dict):
-                mfa_state = str(init_data.get("State", ""))
-        except (json.JSONDecodeError, TypeError):
-            pass
+    mfa_state = _extract_mfa_state(init_text, init_status)
 
     # Step 5: Submit secondary authentication
     mfa_form_data = {
@@ -192,24 +174,7 @@ async def _async_handle_secondary_auth(
     }
 
     mfa_text, mfa_status = await _async_rsts_request(session, pkce_base_url + _STEP_SECONDARY_AUTH, mfa_form_data, ssl_context, timeout)
-
-    if mfa_status == 203:
-        error_message = "Secondary authentication failed."
-        try:
-            mfa_data: object = json.loads(mfa_text)
-            if isinstance(mfa_data, dict) and "Message" in mfa_data:
-                error_message = str(mfa_data["Message"])
-        except (json.JSONDecodeError, TypeError):
-            if mfa_text:
-                error_message = mfa_text
-        raise SafeguardError(f"Multi-factor authentication failed: {error_message}")
-
-    if not (200 <= mfa_status < 300):
-        raise SafeguardError(
-            f"Multi-factor authentication failed: {mfa_text}",
-            status_code=mfa_status,
-            response_body=mfa_text,
-        )
+    _check_mfa_result(mfa_text, mfa_status)
 
 
 # ---------------------------------------------------------------------------
@@ -240,28 +205,7 @@ async def _async_resolve_identity_provider(
     if not isinstance(providers, list):
         raise SafeguardError("Unexpected response from AuthenticationProviders endpoint")
 
-    provider_lower = provider.lower()
-
-    for p in providers:
-        if isinstance(p, dict):
-            rsts_id = str(p.get("RstsProviderId", ""))
-            if rsts_id.lower() == provider_lower:
-                return rsts_id
-
-    for p in providers:
-        if isinstance(p, dict):
-            name = str(p.get("Name", ""))
-            if name.lower() == provider_lower:
-                return str(p.get("RstsProviderId", ""))
-
-    for p in providers:
-        if isinstance(p, dict):
-            rsts_id = str(p.get("RstsProviderId", ""))
-            if provider_lower in rsts_id.lower():
-                return rsts_id
-
-    known = [f"{p.get('Name', '?')} ({p.get('RstsProviderId', '?')})" for p in providers if isinstance(p, dict)]
-    raise SafeguardError(f"Unable to find provider matching '{provider}' in [{', '.join(known)}]")
+    return _match_provider(providers, provider)
 
 
 async def _async_post_authorization_code(
