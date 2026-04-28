@@ -346,8 +346,7 @@ class AsyncA2AContext:
             Service.A2A,
             endpoint,
             params=query,
-            json=body if isinstance(body, dict) else None,
-            data=body if isinstance(body, str) else None,
+            json=body,
             headers={"authorization": f"A2A {api_key}"},
             cert=self._cert,
         )
