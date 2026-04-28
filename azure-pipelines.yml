@@ -47,6 +47,23 @@ jobs:
   steps:
   - template: pipeline-templates/build-steps.yml
 
+  # GitHub release for every merge build (dev builds are marked as prerelease)
+  - task: GitHubRelease@1
+    displayName: 'Publish GitHub release'
+    inputs:
+      gitHubConnection: 'PangaeaBuild-GitHub'
+      repositoryName: 'OneIdentity/PySafeguard'
+      action: 'create'
+      target: '$(Build.SourceVersion)'
+      tagSource: 'userSpecifiedTag'
+      tag: '$(PackageVersion)'
+      title: '$(PackageVersion)'
+      isPreRelease: ${{ not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')) }}
+      changeLogCompareToRelease: 'lastFullRelease'
+      changeLogType: 'commitBased'
+      assets: $(Build.ArtifactStagingDirectory)/dist/*
+
+  # PyPI publish only for tagged builds
   - script: |
       python -m pip install --upgrade twine
     displayName: 'Install twine'
