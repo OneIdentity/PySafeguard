@@ -2,14 +2,14 @@
 
 import pytest
 
-from pysafeguard import HttpMethods, Services
+from pysafeguard import Service
 
 pytestmark = pytest.mark.integration
 
 
 class TestTokenLifetime:
     def test_get_remaining_token_lifetime(self, sync_connection):
-        remaining = sync_connection.get_remaining_token_lifetime()
+        remaining = sync_connection.token_lifetime_remaining
         assert remaining is not None
         assert isinstance(remaining, int)
         assert remaining > 0
@@ -35,7 +35,7 @@ class TestProviderLookup:
 
 class TestAuthenticationProviders:
     def test_list_providers(self, sync_connection):
-        resp = sync_connection.invoke(HttpMethods.GET, Services.CORE, "AuthenticationProviders")
+        resp = sync_connection.get(Service.CORE, "AuthenticationProviders")
         assert resp.status_code == 200
         providers = resp.json()
         assert isinstance(providers, list)

@@ -1,0 +1,3 @@
+variables:
+  - name: isTagBuild
+    value: ${{ startsWith(variables['Build.SourceBranch'], 'refs/tags/') }}

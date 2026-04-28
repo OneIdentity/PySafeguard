@@ -3,8 +3,16 @@ One Identity Safeguard Python SDK
 
 -----------
 
+> **⚠️ Breaking Change: v8.0**
+>
+> PySafeguard v8.0 is a complete Pythonic redesign of the SDK. The public API has
+> changed significantly. If you are upgrading from v7.x, see the
+> [Migration Guide](#migrating-from-7x-to-80) at the bottom of this document.
+
+-----------
+
 <p align="center">
-<i>Check out our <a href="samples">sample projects</a> to get started with your own custom integration to Safeguard!</i>
+<i>Check out our <a href="https://github.com/OneIdentity/PySafeguard/tree/main/samples">sample projects</a> to get started with your own custom integration to Safeguard!</i>
 </p>
 
 -----------
@@ -20,10 +28,10 @@ nothing that can be done in the Safeguard UI that cannot also be performed
 using the Safeguard API programmatically.
 
 PySafeguard is provided to facilitate calling the Safeguard API from Python.
-It is meant to remove the complexity of dealing with authentication via
-Safeguard's embedded secure token service (STS). The basic usage is to call
-one of the `connect_*()` methods to establish a connection to Safeguard, then
-you can call `invoke()` multiple times using the same authenticated connection.
+It removes the complexity of dealing with authentication via Safeguard's
+embedded secure token service (STS). Create a `SafeguardClient` with an
+authentication strategy, and use standard HTTP verb methods (`get`, `post`,
+`put`, `delete`) to interact with the API.
 
 PySafeguard also provides an easy way to call Safeguard A2A from Python. The A2A service requires client certificate authentication for retrieving passwords for application integration. When Safeguard A2A is properly configured, specified passwords can be retrieved with a single method call without requiring access request workflow approvals. Safeguard A2A is protected by API keys and IP restrictions in addition to client certificate authentication.
 
@@ -37,16 +45,19 @@ This Python module is published to the [PyPi registry](https://pypi.org/project/
 > pip install pysafeguard
 ```
 
-## Dependencies
-pysafeguard uses the python requests module, which will need to be installed prior to using pysafeguard
-
+For async support:
 ```Bash
-> pip install requests
+> pip install pysafeguard[async]
 ```
-In addition if you will be using the SignalR functionality you will need to install SignalR Core client module.  SignalR Core client is only required if using the SignalR functionality
 
+For SignalR event listener support:
 ```Bash
-> pip install signalrcore
+> pip install pysafeguard[signalr]
+```
+
+For all extras:
+```Bash
+> pip install pysafeguard[async,signalr]
 ```
 
 ### Communicating securely with Safeguard using the SDK
@@ -61,7 +72,7 @@ If the system is already properly configured, the SDK should work
 without any errors.  If there are errors, consider using one of the
 following methods to establish trust.
 
-- Environment variable providing path to certificates</li>
+- Environment variable providing path to certificates
 
   In Bourne Shell:
   ```Bash
@@ -75,7 +86,7 @@ following methods to establish trust.
   > $env:REQUESTS_CA_BUNDLE="c:ssl\certs\ca-certificates.crt"
   ```
   
-- Use the `verify` option when creating the `PySafeguardConnection`</li>
+- Use the `verify` option when creating the `SafeguardClient`
 
   See examples below for utilizing this method.  While `verify` can be
   used to disable security checking this is not recommended.
@@ -86,88 +97,139 @@ following methods to establish trust.
 
 ## Getting Started
 
-A simple code example for calling the Safeguard API with username and password authentication through the local Safeguard STS:
+> **Note:** Recent versions of Safeguard have Resource Owner Grant (ROG)
+> disabled by default. This means `PasswordAuth` will not work unless ROG has
+> been explicitly enabled on the appliance. **`PkceAuth` is the recommended
+> authentication method** and works regardless of the ROG setting.
+
+PKCE authentication (recommended):
 
 ```Python
-from pysafeguard import *
+from pysafeguard import SafeguardClient, PkceAuth, Service
 
-connection = PySafeguardConnection('safeguard.sample.corp', 'ssl/pathtoca.pem')
-connection.connect_password('Admin','Admin123')
-me = connection.invoke(HttpMethods.GET, Services.CORE, 'Me', query=dict(fields='DisplayName'))
-print('Connected to Safeguard as %s' % me.json()['DisplayName'])
+with SafeguardClient("safeguard.sample.corp",
+                     auth=PkceAuth("local", "Admin", "Admin123"),
+                     verify="ssl/pathtoca.pem") as client:
+    me = client.get(Service.CORE, "Me", params={"fields": "DisplayName"})
+    print(f"Connected to Safeguard as {me.json()['DisplayName']}")
 ```
 
-Password authentication to an external provider is as follows:
-(Sample can be found <a href="samples\PasswordExternalExample.py">here</a>.)
+Password authentication (requires ROG to be enabled on the appliance):
 
 ```Python
-from pysafeguard import *
+from pysafeguard import SafeguardClient, PasswordAuth, Service
 
-connection = PySafeguardConnection('safeguard.sample.corp', 'ssl/pathtoca.pem')
-connection.connect_password('Admin','Admin123', 'myexternalprovider')
+with SafeguardClient("safeguard.sample.corp",
+                     auth=PasswordAuth("local", "Admin", "Admin123"),
+                     verify="ssl/pathtoca.pem") as client:
+    me = client.get(Service.CORE, "Me", params={"fields": "DisplayName"})
+    print(f"Connected to Safeguard as {me.json()['DisplayName']}")
 ```
 
-
-Client certificate authentication is also available. This can be done using PEM and KEY file.
+Password authentication to an external provider (requires ROG):
 
 ```Python
-from pysafeguard import *
+from pysafeguard import SafeguardClient, PasswordAuth
 
-connection = PySafeguardConnection('safeguard.sample.corp', 'ssl/pathtoca.pem')
-connection.connect_certificate('ssl/pathtocertuser.pem', 'ssl/pathtocertuser.key')
+with SafeguardClient("safeguard.sample.corp",
+                     auth=PasswordAuth("myexternalprovider", "Admin", "Admin123"),
+                     verify="ssl/pathtoca.pem") as client:
+    # client is now authenticated
+    ...
 ```
 
-> **Note**  
-> Password protected certificates are not currently supported in PySafeguard.
-
-Client certificate authentication to an external provider is also available. This can be done using PEM and KEY file.
+PKCE authentication to an external provider:
 
 ```Python
-from pysafeguard import *
+from pysafeguard import SafeguardClient, PkceAuth
 
-connection = PySafeguardConnection('safeguard.sample.corp', 'ssl/pathtoca.pem')
-connection.connect_certificate('ssl/pathtocertuser.pem', 'ssl/pathtocertuser.key', 'myexternalprovider')
+with SafeguardClient("safeguard.sample.corp",
+                     auth=PkceAuth("myexternalprovider", "Admin", "Admin123"),
+                     verify="ssl/pathtoca.pem") as client:
+    # client is now authenticated
+    ...
 ```
 
-
-A connection can also be made anonymously and without verifying the appliance certificate.
+Client certificate authentication using PEM and KEY files:
 
 ```Python
-from pysafeguard import *
+from pysafeguard import SafeguardClient, CertificateAuth
 
-connection = PySafeguardConnection('safeguard.sample.corp', False)
-system_time = connection.invoke(HttpMethods.GET, Services.APPLIANCE, 'SystemTime')
+with SafeguardClient("safeguard.sample.corp",
+                     auth=CertificateAuth("ssl/pathtocertuser.pem", "ssl/pathtocertuser.key"),
+                     verify="ssl/pathtoca.pem") as client:
+    me = client.get(Service.CORE, "Me").json()
 ```
 
-Authentication is also possible using an existing Safeguard API token:
+Client certificate authentication to an external provider:
 
 ```Python
-from pysafeguard import *
+from pysafeguard import SafeguardClient, CertificateAuth
 
-connection = PySafeguardConnection('safeguard.sample.corp', 'ssl/pathtoca.pem')
-connection.connect_token(myApiToken)
+with SafeguardClient("safeguard.sample.corp",
+                     auth=CertificateAuth("ssl/cert.pem", "ssl/key.pem", provider="myexternalprovider"),
+                     verify="ssl/pathtoca.pem") as client:
+    ...
 ```
-> **Note**  
-> Two-factor authentication is not currently supported in PySafeguard.
+
+Anonymous connection without TLS verification:
+
+```Python
+from pysafeguard import SafeguardClient, Service
+
+client = SafeguardClient("safeguard.sample.corp", verify=False)
+system_time = client.get(Service.APPLIANCE, "SystemTime")
+client.close()
+```
+
+Authentication using an existing Safeguard API token:
+
+```Python
+from pysafeguard import SafeguardClient, TokenAuth
+
+with SafeguardClient("safeguard.sample.corp",
+                     auth=TokenAuth(my_api_token),
+                     verify="ssl/pathtoca.pem") as client:
+    me = client.get(Service.CORE, "Me").json()
+```
+
+### Async Usage
+
+PySafeguard provides full async support via `AsyncSafeguardClient`:
+
+```Python
+from pysafeguard import AsyncSafeguardClient, PasswordAuth, Service
+
+async with AsyncSafeguardClient("safeguard.sample.corp",
+                                auth=PasswordAuth("local", "Admin", "Admin123"),
+                                verify=False) as client:
+    resp = await client.get(Service.CORE, "Users")
+    users = await resp.json()
+```
 
 ## Getting Started With A2A
 
-Once you have configured your A2A registration in Safeguard you can retrieve an A2A password or private key using a certificate and api key.
+Once you have configured your A2A registration in Safeguard you can retrieve
+an A2A password or private key using a certificate and API key.
 
 To retrieve a password via A2A:
 
 ```Python
-from pysafeguard import *
+from pysafeguard import A2AContext
 
-password = PySafeguardConnection.a2a_get_credential('safeguard.sample.corp', 'myapikey', 'ssl/pathtocertuser.pem', 'ssl/pathtocertuser.key', 'ssl/pathtoca.pem')
+with A2AContext("safeguard.sample.corp", "ssl/cert.pem", "ssl/key.pem",
+                verify="ssl/pathtoca.pem") as ctx:
+    password = ctx.retrieve_password("myapikey")
 ```
 
 To retrieve a private key in OpenSSH format via A2A:
 
 ```Python
-from pysafeguard import *
+from pysafeguard import A2AContext, SshKeyFormat
 
-privatekey = PySafeguardConnection.a2a_get_credential('safeguard.sample.corp', 'myapikey', 'ssl/pathtocertuser.pem', 'ssl/pathtocertuser.key', 'ssl/pathtoca.pem', A2ATypes.PRIVATEKEY)
+with A2AContext("safeguard.sample.corp", "ssl/cert.pem", "ssl/key.pem",
+                verify="ssl/pathtoca.pem") as ctx:
+    private_key = ctx.retrieve_private_key("myapikey", key_format=SshKeyFormat.OPENSSH)
 ```
 
 ## About the Safeguard API
@@ -200,78 +262,260 @@ to call the Safeguard API directly using Swagger.
 
 ### Examples
 
-Most functionality is in the core service as mentioned above.  The notification service
+Most functionality is in the core service as mentioned above. The notification service
 provides read-only information for status, etc.
 
 #### Anonymous Call for Safeguard Status
 
-Sample can be found <a href="samples\AnonymousExample.py">here</a>.
-
 ```Python
-from pysafeguard import *
+from pysafeguard import SafeguardClient, Service
 
-connection = PySafeguardConnection('safeguard.sample.corp', False)
-result = connection.invoke(HttpMethods.GET, Services.NOTIFICATION, 'Status')
-print(json.dumps(result.json(),indent=2,sort_keys=True))
+client = SafeguardClient("safeguard.sample.corp", verify=False)
+result = client.get(Service.NOTIFICATION, "Status")
+print(json.dumps(result.json(), indent=2, sort_keys=True))
+client.close()
 ```
 
 #### Get remaining access token lifetime
 
-Sample can be found <a href="samples\PasswordExample.py">here</a>.
-
 ```Python
-from pysafeguard import *
+from pysafeguard import SafeguardClient, PasswordAuth
 
-connection = PySafeguardConnection('safeguard.sample.corp', 'ssl/pathtoca.pem')
-connection.connect_password('username', 'password')
-minutes_left = connection.get_remaining_token_lifetime()
-print(minutes_left)
+with SafeguardClient("safeguard.sample.corp",
+                     auth=PasswordAuth("local", "username", "password"),
+                     verify="ssl/pathtoca.pem") as client:
+    minutes_left = client.token_lifetime_remaining
+    print(minutes_left)
 ```
 
-#### Register for SignalR events
+#### Listen for SignalR events
 
-To use the SignalR functionality, you will need to install the python SignalR Core client module
+To use the SignalR functionality, install the signalr extra:
 
 ```Bash
-> pip install signalrcore
+> pip install pysafeguard[signalr]
 ```
-
-Sample can be found <a href="samples\SignalRExample.py">here</a>.
 
 ```Python
-from pysafeguard import *
+from pysafeguard import SafeguardClient, PasswordAuth
 
-connection = PySafeguardConnection(hostName, caFile)
+with SafeguardClient("safeguard.sample.corp",
+                     auth=PasswordAuth("local", "username", "password"),
+                     verify="ssl/pathtoca.pem") as client:
+    listener = client.get_event_listener()
+    listener.on("AssetCreated", lambda name, body: print(f"Asset created: {name}"))
 
-# SignalR callback function to handle the signalR messages
-def signalrcallback(results):
-    print("Received SignalR event: {0}".format(results[0]['Message']))
-
-print("Connecting to SignalR via username/password")
-connection.register_signalr_username(connection, signalrcallback, userName, password)
-
-print("Connecting to SignalR via certifacte")
-connection.register_signalr_certificate(connection, signalrcallback, userCertFile, userKeyFile)
+    with listener:
+        listener.start()
+        input("Press Enter to stop listening...")
 ```
-> **Note**  
-> Password protected certificates are not currently supported in PySafeguard.
 
 #### Create a New User and Set the Password
 
-Sample can be found <a href="samples\NewUserExample.py">here</a>.
-
 ```Python
-from pysafeguard import *
-import json
+from pysafeguard import SafeguardClient, PasswordAuth, Service
 
 user = {
-    'PrimaryAuthenticationProvider': { 'Id': -1 },
-    'Name': 'MyNewUser'
+    "PrimaryAuthenticationProvider": {"Id": -1},
+    "Name": "MyNewUser",
 }
-password = 'MyNewUser123'
-connection = PySafeguardConnection('safeguard.sample.corp', 'ssl/pathtoca.pem')
-connection.connect_password('username', 'password')
-result = connection.invoke(HttpMethods.POST, Services.CORE, 'Users', body=user).json()
-userId = result.get('Id')
-connection.invoke(HttpMethods.PUT, Services.CORE, f'Users/{userId}/Password', body=password)
+
+with SafeguardClient("safeguard.sample.corp",
+                     auth=PasswordAuth("local", "username", "password"),
+                     verify="ssl/pathtoca.pem") as client:
+    result = client.post(Service.CORE, "Users", json=user).json()
+    user_id = result["Id"]
+    client.put(Service.CORE, f"Users/{user_id}/Password", data="MyNewUser123")
 ```
+
+#### Streaming Downloads
+
+```Python
+from pysafeguard import SafeguardClient, PasswordAuth, HttpMethod, Service
+
+with SafeguardClient("safeguard.sample.corp",
+                     auth=PasswordAuth("local", "Admin", "Admin123"),
+                     verify=False) as client:
+    # Stream to file
+    bytes_written = client.download(Service.APPLIANCE, "Backups/1/Download", "/tmp/backup.sgb")
+
+    # Or stream manually
+    resp = client.stream(HttpMethod.GET, Service.APPLIANCE, "Backups/1/Download")
+    with resp:
+        for chunk in resp.iter_content(chunk_size=8192):
+            process(chunk)
+```
+
+---
+
+## Migrating from 7.x to 8.0
+
+PySafeguard 8.0 is a complete redesign of the public API. This guide shows
+how to convert your 7.x code to the new API.
+
+### Client Construction
+
+```python
+# 7.x
+from pysafeguard import PySafeguardConnection
+conn = PySafeguardConnection("host", "ssl/ca.pem")
+conn.connect_password("Admin", "Admin123")
+
+# 8.0
+from pysafeguard import SafeguardClient, PasswordAuth
+client = SafeguardClient("host", auth=PasswordAuth("local", "Admin", "Admin123"), verify="ssl/ca.pem")
+client.login()
+# Or use a context manager (auto login/logout):
+with SafeguardClient("host", auth=PasswordAuth("local", "Admin", "Admin123"), verify="ssl/ca.pem") as client:
+    ...
+```
+
+### Authentication
+
+```python
+# 7.x — Factory functions
+conn = connect_password("host", "Admin", "pass", verify=False)
+conn = connect_certificate("host", "cert.pem", "key.pem")
+conn = connect_token("host", my_token)
+
+# 8.0 — Auth strategy objects
+client = SafeguardClient("host", auth=PasswordAuth("local", "Admin", "pass"), verify=False)
+client = SafeguardClient("host", auth=CertificateAuth("cert.pem", "key.pem"))
+client = SafeguardClient("host", auth=TokenAuth(my_token))
+```
+
+### API Calls
+
+```python
+# 7.x
+resp = conn.invoke(HttpMethods.GET, Services.CORE, "Users")
+resp = conn.invoke(HttpMethods.POST, Services.CORE, "Users", body={"Name": "Test"})
+resp = conn.invoke(HttpMethods.GET, Services.CORE, "Users", query={"filter": "Disabled eq false"})
+resp = conn.invoke(HttpMethods.GET, Services.CORE, "Me", additionalHeaders={"X-Custom": "val"})
+
+# 8.0
+resp = client.get(Service.CORE, "Users")
+resp = client.post(Service.CORE, "Users", json={"Name": "Test"})
+resp = client.get(Service.CORE, "Users", params={"filter": "Disabled eq false"})
+resp = client.get(Service.CORE, "Me", headers={"X-Custom": "val"})
+
+# Low-level escape hatch (replaces invoke)
+resp = client.request(HttpMethod.GET, Service.CORE, "Users")
+```
+
+### Enums
+
+```python
+# 7.x (plural)                    # 8.0 (singular)
+Services.CORE                  →  Service.CORE
+HttpMethods.GET                →  HttpMethod.GET
+A2ATypes.PASSWORD              →  A2AType.PASSWORD
+SshKeyFormats.OPENSSH          →  SshKeyFormat.OPENSSH
+```
+
+### Exceptions
+
+```python
+# 7.x
+from pysafeguard import SafeguardException, WebRequestError
+try:
+    conn.invoke(...)
+except WebRequestError as e:
+    print(e.message)
+
+# 8.0
+from pysafeguard import SafeguardError, ApiError, AuthenticationError, NotFoundError
+try:
+    client.get(Service.CORE, "Users")
+except NotFoundError:
+    print("Not found")
+except AuthenticationError:
+    print("Auth failed")
+except ApiError as e:
+    print(f"HTTP {e.status_code}: {e.error_message}")
+except SafeguardError as e:
+    print(f"Error: {e}")
+```
+
+### Streaming
+
+```python
+# 7.x
+resp = conn.invoke_stream(HttpMethods.GET, Services.APPLIANCE, "Backups/1/Download")
+written = conn.download(Services.APPLIANCE, "Backups/1/Download", "/tmp/file.sgb")
+resp = conn.upload(Services.APPLIANCE, "Backups/Upload", data, content_type="application/octet-stream")
+
+# 8.0
+resp = client.stream(HttpMethod.GET, Service.APPLIANCE, "Backups/1/Download")
+written = client.download(Service.APPLIANCE, "Backups/1/Download", "/tmp/file.sgb")
+resp = client.upload(Service.APPLIANCE, "Backups/Upload", data, content_type="application/octet-stream")
+```
+
+### A2A
+
+```python
+# 7.x
+password = PySafeguardConnection.a2a_get_credential("host", "apikey", "cert.pem", "key.pem")
+
+# 8.0
+from pysafeguard import A2AContext
+with A2AContext("host", "cert.pem", "key.pem") as ctx:
+    password = ctx.retrieve_password("apikey")
+```
+
+### Token Lifetime
+
+```python
+# 7.x
+minutes = conn.get_remaining_token_lifetime()
+
+# 8.0 (sync)
+minutes = client.token_lifetime_remaining  # property
+
+# 8.0 (async)
+minutes = await client.get_token_lifetime_remaining()
+```
+
+### Properties
+
+```python
+# 7.x                             # 8.0
+conn.UserToken                 →  client.user_token
+conn.apiVersion                →  client.api_version
+conn.headers["authorization"]  →  client._headers["authorization"]  # private
+```
+
+### Imports
+
+```python
+# 7.x
+from pysafeguard import *  # PySafeguardConnection, Connection, HttpMethods, Services, ...
+
+# 8.0
+from pysafeguard import (
+    SafeguardClient,
+    AsyncSafeguardClient,
+    PasswordAuth,
+    CertificateAuth,
+    PkceAuth,
+    TokenAuth,
+    Service,
+    HttpMethod,
+    SafeguardError,
+    ApiError,
+    A2AContext,
+    HiddenString,
+)
+```
+
+### Removed
+
+The following have been removed in 8.0 with no direct replacement:
+
+- `PySafeguardConnection` class — use `SafeguardClient`
+- `Connection` / `AsyncConnection` (public API) — use `SafeguardClient` / `AsyncSafeguardClient`
+- All `connect_*()` / `async_connect_*()` factory functions — use auth objects
+- `register_signalr_username()` / `register_signalr_certificate()` — use `client.get_event_listener()`
+- `a2a_get_credential()` class method — use `A2AContext`
+- `WebRequestError` / `AsyncWebRequestError` — use `ApiError`
+- `SafeguardException` — use `SafeguardError`

@@ -1,70 +1,113 @@
-# mypy: ignore-errors
-# type: ignore
+"""PySafeguard — Python SDK for One Identity Safeguard Web API."""
 
-from .connection import Connection
-from .connection import WebRequestError as WebRequestError
-from .data_types import A2ATypes as A2ATypes
-from .data_types import HttpMethods as HttpMethods
-from .data_types import Services
-from .data_types import SshKeyFormats as SshKeyFormats
-from .utility import assemble_path, assemble_url
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+# Client
+from .client import SafeguardClient as SafeguardClient
+
+# Auth strategies
+from .auth import Auth as Auth
+from .auth import CertificateAuth as CertificateAuth
+from .auth import PasswordAuth as PasswordAuth
+from .auth import PkceAuth as PkceAuth
+from .auth import TokenAuth as TokenAuth
+
+# Errors
+from .errors import ApiError as ApiError
+from .errors import AuthenticationError as AuthenticationError
+from .errors import AuthorizationError as AuthorizationError
+from .errors import NotFoundError as NotFoundError
+from .errors import SafeguardError as SafeguardError
+from .errors import TransportError as TransportError
+
+# Enums
+from .data_types import A2AType as A2AType
+from .data_types import HttpMethod as HttpMethod
+from .data_types import Service as Service
+from .data_types import SshKeyFormat as SshKeyFormat
+
+# A2A
+from .a2a import A2AContext as A2AContext
+
+# Events
+from .event import EventHandlerRegistry as EventHandlerRegistry
+from .event import EventListenerState as EventListenerState
+from .event import PersistentSafeguardEventListener as PersistentSafeguardEventListener
+from .event import SafeguardEventHandler as SafeguardEventHandler
+from .event import SafeguardEventListener as SafeguardEventListener
+from .event import SafeguardStateCallback as SafeguardStateCallback
+
+# Types
+from .hidden_string import HiddenString as HiddenString
+
+if TYPE_CHECKING:
+    from .async_a2a import AsyncA2AContext as AsyncA2AContext
+    from .async_client import AsyncSafeguardClient as AsyncSafeguardClient
+
+# Lazy imports for optional async dependencies (aiohttp).
+# These are resolved on first access so that ``import pysafeguard``
+# works without the ``[async]`` extra installed.
+_ASYNC_LAZY_IMPORTS: dict[str, tuple[str, str]] = {
+    "AsyncSafeguardClient": (".async_client", "AsyncSafeguardClient"),
+    "AsyncA2AContext": (".async_a2a", "AsyncA2AContext"),
+}
 
 
-class PySafeguardConnection(Connection):
-    @staticmethod
-    def __register_signalr(host, callback, options, verify):
-        """Register a SignalR callback and start listening."""
-        from signalrcore.hub_connection_builder import HubConnectionBuilder
+def __getattr__(name: str) -> object:
+    if name in _ASYNC_LAZY_IMPORTS:
+        module_path, attr = _ASYNC_LAZY_IMPORTS[name]
+        try:
+            import importlib
 
-        if not callback:
-            raise Exception("A callback must be specified to register for the SignalR events.")
-        options.update({"verify_ssl": verify})
-        server_url = assemble_url(host, assemble_path(Services.EVENT, "signalr"))
-        hub_connection = (
-            HubConnectionBuilder()
-            .with_url(server_url, options=options)
-            .with_automatic_reconnect({"type": "raw", "keep_alive_interval": 10, "reconnect_interval": 10, "max_attempts": 5})
-            .build()
-        )
+            mod = importlib.import_module(module_path, __name__)
+            value = getattr(mod, attr)
+            globals()[name] = value
+            return value
+        except ImportError as exc:
+            if "aiohttp" in str(exc) or "multidict" in str(exc):
+                raise ImportError(f"{name} requires the 'async' extra. Install it with: pip install pysafeguard[async]") from exc
+            raise
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
-        hub_connection.on("ReceiveMessage", callback)
-        hub_connection.on("NotifyEventAsync", callback)
-        hub_connection.on_open(lambda: print("connection opened and handshake received ready to send messages"))
-        hub_connection.on_close(lambda: print("connection closed"))
-        hub_connection.start()
 
-    @staticmethod
-    def register_signalr_username(conn, callback, username, password):
-        """Wrapper to register a SignalR callback using username/password authentication.
+def __dir__() -> list[str]:
+    return sorted(set(list(globals().keys()) + list(_ASYNC_LAZY_IMPORTS.keys())))
 
-        Arguments:
-        conn -- PySafeguardConnection instance object
-        callback -- Callback function to handle messages that come back
-        username -- Username for authentication
-        password -- Password for authentication
-        """
 
-        def _token_factory_username():
-            conn.connect_password(username, password)
-            return conn.UserToken
-
-        options = {"access_token_factory": _token_factory_username}
-        PySafeguardConnection.__register_signalr(conn.host, callback, options, bool(conn.req_globals.get("verify", True)))
-
-    @staticmethod
-    def register_signalr_certificate(conn, callback, certfile, keyfile):
-        """Wrapper to register a SignalR callback using certificate authentication.
-
-        Arguments:
-        conn -- PySafeguardConnection instance object
-        callback -- Callback function to handle messages that come back
-        certfile -- Path to the user certificate in pem format.
-        keyfile -- Path to the user certificate's key in key format.
-        """
-
-        def _token_factory_certificate():
-            conn.connect_certificate(certfile, keyfile, provider="certificate")
-            return conn.UserToken
-
-        options = options = {"access_token_factory": _token_factory_certificate}
-        PySafeguardConnection.__register_signalr(conn.host, callback, options, bool(conn.req_globals.get("verify", True)))
+__all__ = [
+    # Client
+    "SafeguardClient",
+    "AsyncSafeguardClient",
+    # Auth
+    "Auth",
+    "PasswordAuth",
+    "CertificateAuth",
+    "TokenAuth",
+    "PkceAuth",
+    # Errors
+    "SafeguardError",
+    "ApiError",
+    "AuthenticationError",
+    "AuthorizationError",
+    "NotFoundError",
+    "TransportError",
+    # Enums
+    "Service",
+    "HttpMethod",
+    "A2AType",
+    "SshKeyFormat",
+    # A2A
+    "A2AContext",
+    "AsyncA2AContext",
+    # Events
+    "SafeguardEventListener",
+    "PersistentSafeguardEventListener",
+    "EventHandlerRegistry",
+    "EventListenerState",
+    "SafeguardEventHandler",
+    "SafeguardStateCallback",
+    # Types
+    "HiddenString",
+]

@@ -1,12 +1,15 @@
-from pysafeguard import *
 import json
 
+from pysafeguard import SafeguardClient, Service
+
 # The appliance host name or IP address
-hostName = ''
+host = ""
 
-print('Connecting anonymously')
-connection = PySafeguardConnection(hostName, False)
+print("Connecting anonymously")
+client = SafeguardClient(host, verify=False)
 
-print('Getting status')
-result = connection.invoke(HttpMethods.GET, Services.NOTIFICATION, 'Status')
-print(json.dumps(result.json(),indent=2,sort_keys=True))
+print("Getting status")
+result = client.get(Service.NOTIFICATION, "Status")
+print(json.dumps(result.json(), indent=2, sort_keys=True))
+
+client.close()

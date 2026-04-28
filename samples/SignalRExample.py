@@ -1,41 +1,22 @@
-from pysafeguard import *
-import json
-import time
+from pysafeguard import SafeguardClient, PasswordAuth
 
 # The appliance host name or IP address
-hostName = ''
+host = ""
 
 # The user name for password authentication
-userName = ''
+username = ""
 
 # The password for password authentication
-password = ''
+password = ""
 
-# Path to the trusted root ca of the appliance
-caFile = ''
+# Path to the trusted root CA of the appliance
+ca_file = ""
 
-# Path to the .pem file for certificate authentication
-userCertFile = ''
+with SafeguardClient(host, auth=PasswordAuth("local", username, password), verify=ca_file) as client:
+    listener = client.get_event_listener()
+    listener.on("AssetCreated", lambda name, body: print(f"Asset created: {name}"))
 
-# Path to the corresponding .key file for certificate authentication
-userKeyFile = ''
-
-print('Connecting to Safeguard')
-connection = PySafeguardConnection(hostName, caFile)
-
-# SignalR callback function to handle the signalR messages
-def signalrcallback(results):
-    print("Received SignalR event: {0}".format(results[0]['Message']))
-
-
-print("Connecting to SignalR via username/password")
-connection.register_signalr_username(connection, signalrcallback, userName, password)
-time.sleep(30)
-
-
-print("Connecting to SignalR via certifacte")
-connection.register_signalr_certificate(connection, signalrcallback, userCertFile, userKeyFile)
-print("wait 30 seconds to try out signalR")
-time.sleep(30)
-
+    with listener:
+        listener.start()
+        input("Press Enter to stop listening...")
 

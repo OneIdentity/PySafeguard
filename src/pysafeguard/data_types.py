@@ -9,7 +9,7 @@ else:
     from enum import StrEnum
 
 
-class Services(StrEnum):
+class Service(StrEnum):
     CORE = "service/core"
     APPLIANCE = "service/appliance"
     NOTIFICATION = "service/notification"
@@ -18,20 +18,27 @@ class Services(StrEnum):
     RSTS = "RSTS"
 
 
-class HttpMethods(StrEnum):
+class HttpMethod(StrEnum):
     GET = "GET"
     POST = "POST"
     PUT = "PUT"
     DELETE = "DELETE"
 
 
-class A2ATypes(StrEnum):
+class A2AType(StrEnum):
     PASSWORD = "password"
     PRIVATEKEY = "privatekey"
     APIKEYSECRET = "apikey"
 
 
-class SshKeyFormats(StrEnum):
+class SshKeyFormat(StrEnum):
     OPENSSH = "openssh"
     SSH2 = "ssh2"
     PUTTY = "putty"
+
+
+# Legacy aliases — deprecated in v8.0, will be removed in a future version.
+Services = Service
+HttpMethods = HttpMethod
+A2ATypes = A2AType
+SshKeyFormats = SshKeyFormat

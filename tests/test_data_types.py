@@ -1,55 +1,70 @@
 """Unit tests for pysafeguard.data_types — enum definitions and StrEnum behavior."""
 
-from pysafeguard.data_types import A2ATypes, HttpMethods, Services, SshKeyFormats
+from pysafeguard.data_types import A2AType, A2ATypes, HttpMethod, HttpMethods, Service, Services, SshKeyFormat, SshKeyFormats
 
 
-class TestServices:
+class TestService:
     def test_core(self):
-        assert Services.CORE == "service/core"
+        assert Service.CORE == "service/core"
 
     def test_appliance(self):
-        assert Services.APPLIANCE == "service/appliance"
+        assert Service.APPLIANCE == "service/appliance"
 
     def test_notification(self):
-        assert Services.NOTIFICATION == "service/notification"
+        assert Service.NOTIFICATION == "service/notification"
 
     def test_a2a(self):
-        assert Services.A2A == "service/a2a"
+        assert Service.A2A == "service/a2a"
 
     def test_event(self):
-        assert Services.EVENT == "service/event"
+        assert Service.EVENT == "service/event"
 
     def test_rsts(self):
-        assert Services.RSTS == "RSTS"
+        assert Service.RSTS == "RSTS"
 
     def test_is_str(self):
-        assert isinstance(Services.CORE, str)
+        assert isinstance(Service.CORE, str)
 
     def test_string_concatenation(self):
-        # StrEnum values should work seamlessly in string operations
-        assert "https://host/" + Services.CORE == "https://host/service/core"
+        assert "https://host/" + Service.CORE == "https://host/service/core"
 
 
-class TestHttpMethods:
+class TestHttpMethod:
     def test_values(self):
-        assert HttpMethods.GET == "GET"
-        assert HttpMethods.POST == "POST"
-        assert HttpMethods.PUT == "PUT"
-        assert HttpMethods.DELETE == "DELETE"
+        assert HttpMethod.GET == "GET"
+        assert HttpMethod.POST == "POST"
+        assert HttpMethod.PUT == "PUT"
+        assert HttpMethod.DELETE == "DELETE"
 
     def test_is_str(self):
-        assert isinstance(HttpMethods.GET, str)
+        assert isinstance(HttpMethod.GET, str)
 
 
-class TestA2ATypes:
+class TestA2AType:
     def test_values(self):
-        assert A2ATypes.PASSWORD == "password"
-        assert A2ATypes.PRIVATEKEY == "privatekey"
-        assert A2ATypes.APIKEYSECRET == "apikey"
+        assert A2AType.PASSWORD == "password"
+        assert A2AType.PRIVATEKEY == "privatekey"
+        assert A2AType.APIKEYSECRET == "apikey"
 
 
-class TestSshKeyFormats:
+class TestSshKeyFormat:
     def test_values(self):
-        assert SshKeyFormats.OPENSSH == "openssh"
-        assert SshKeyFormats.SSH2 == "ssh2"
-        assert SshKeyFormats.PUTTY == "putty"
+        assert SshKeyFormat.OPENSSH == "openssh"
+        assert SshKeyFormat.SSH2 == "ssh2"
+        assert SshKeyFormat.PUTTY == "putty"
+
+
+class TestLegacyAliases:
+    """Verify deprecated plural aliases still resolve to the same enum."""
+
+    def test_services_alias(self):
+        assert Services is Service
+
+    def test_http_methods_alias(self):
+        assert HttpMethods is HttpMethod
+
+    def test_a2a_types_alias(self):
+        assert A2ATypes is A2AType
+
+    def test_ssh_key_formats_alias(self):
+        assert SshKeyFormats is SshKeyFormat

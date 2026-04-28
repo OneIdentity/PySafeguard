@@ -1,0 +1,59 @@
+steps:
+- task: UsePythonVersion@0
+  inputs:
+    versionSpec: '3.12'
+  displayName: 'Use Python 3.12'
+
+- script: |
+    python -m pip install --upgrade pip wheel
+    pip install poetry
+    poetry install --all-extras
+  displayName: 'Install dependencies'
+
+- task: PowerShell@2
+  displayName: 'Set package version'
+  inputs:
+    targetType: filePath
+    filePath: $(System.DefaultWorkingDirectory)/versionnumber.ps1
+    arguments: >
+      -BuildId $(Build.BuildId)
+      -TagName $(Build.SourceBranchName)
+      -IsTagBuild $(isTagBuild)
+
+- script: |
+    poetry run ruff check src/
+    poetry run ruff format --check src/
+  displayName: 'Lint with ruff'
+
+- script: |
+    poetry run mypy src/
+  displayName: 'Type check with mypy'
+
+- script: |
+    poetry run python -m pytest tests/ -m "not integration" --tb=short -q
+  displayName: 'Run unit tests'
+
+- script: |
+    poetry build
+  displayName: 'Build distribution'
+
+- script: |
+    pip install twine
+    twine check dist/*
+  displayName: 'Validate distribution'
+
+- task: CopyFiles@2
+  displayName: 'Copy dist to artifact staging directory'
+  inputs:
+    SourceFolder: '$(Build.SourcesDirectory)'
+    Contents: |
+      dist/*
+    TargetFolder: '$(Build.ArtifactStagingDirectory)'
+  condition: succeededOrFailed()
+
+- task: PublishPipelineArtifact@0
+  displayName: 'Publish pipeline artifact'
+  inputs:
+    artifactName: 'drop'
+    targetPath: '$(Build.ArtifactStagingDirectory)'
+  condition: succeededOrFailed()

@@ -1,105 +1,83 @@
+variables:
+- template: pipeline-templates/global-variables.yml
+
 trigger:
   branches:
     include:
     - main
-    - release/*
+    - release-*
   tags:
     include:
     - '*'
   paths:
     exclude:
-      - README.md
+    - README.md
+    - AGENTS.md
 
-pool:
-  vmImage: ubuntu-latest
+pr:
+  branches:
+    include:
+    - main
+    - release-*
+  paths:
+    exclude:
+    - README.md
+    - AGENTS.md
 
-stages:
-  - stage: Build
-    jobs:
-    - job: Build_Dist
-      displayName: 'Generate drop artifact'
-      pool:
-       vmImage: ubuntu-latest
+jobs:
+# Job 1: PR Validation - runs only on pull requests
+- job: PRValidation
+  displayName: 'PR Validation: PySafeguard SDK'
+  condition: eq(variables['Build.Reason'], 'PullRequest')
 
-      steps:
-      - task: UsePythonVersion@0
-        inputs:
-          versionSpec: '3.10'
+  pool:
+    vmImage: ubuntu-latest
 
-      - script: |
-          python -m pip install --upgrade pip wheel
-          pip install poetry
-          poetry install
-        displayName: 'Install software'
+  steps:
+  - template: pipeline-templates/build-steps.yml
 
-      - script: |
-           poetry version $(build.SourceBranchName)
-        displayName: Update pyproject.toml to $(build.SourceBranchName)
-        condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/')
+# Job 2: Build and Publish - runs only on successful merges (not PRs)
+- job: BuildAndPublish
+  displayName: 'Build and publish PySafeguard SDK'
+  condition: ne(variables['Build.Reason'], 'PullRequest')
 
-      - task: PowerShell@2
-        displayName: Update README.md with absolute paths
-        condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/')
-        inputs:
-          targetType: 'inline'
-          script: |
-            # The README.md gets published to PyPi/project/pysafeguard so the relative paths, which work while on GitHub,
-            # must be updated to absolute paths.
-            
-            $file = "README.md"
-            (Get-Content $file).replace('<a href="samples">sample projects</a>', "<a href='https://github.com/OneIdentity/PySafeguard/blob/$Env:BUILD_SOURCEBRANCHNAME/samples'>sample projects</a>") | Set-Content $file
-            (Get-Content $file).replace('<a href="samples\PasswordExternalExample.py">here</a>', "<a href='https://github.com/OneIdentity/PySafeguard/blob/$Env:BUILD_SOURCEBRANCHNAME/samples/PasswordExternalExample.py'>here</a>") | Set-Content $file
-            (Get-Content $file).replace('<a href="samples\PasswordExample.py">here</a>', "<a href='https://github.com/OneIdentity/PySafeguard/blob/$Env:BUILD_SOURCEBRANCHNAME/samples/PasswordExample.py'>here</a>") | Set-Content $file
-            (Get-Content $file).replace('<a href="samples\AnonymousExample.py">here</a>', "<a href='https://github.com/OneIdentity/PySafeguard/blob/$Env:BUILD_SOURCEBRANCHNAME/samples/AnonymousExample.py'>here</a>") | Set-Content $file
-            (Get-Content $file).replace('<a href="samples\SignalRExample.py">here</a>', "<a href='https://github.com/OneIdentity/PySafeguard/blob/$Env:BUILD_SOURCEBRANCHNAME/samples/SignalRExample.py'>here</a>") | Set-Content $file
-            (Get-Content $file).replace('<a href="samples\NewUserExample.py">here</a>', "<a href='https://github.com/OneIdentity/PySafeguard/blob/$Env:BUILD_SOURCEBRANCHNAME/samples/NewUserExample.py'>here</a>") | Set-Content $file
-          failOnStderr: true
-          
-      - script: |
-         poetry build
-        displayName: Build PyPi dist
+  pool:
+    vmImage: ubuntu-latest
 
-      - task: CopyFiles@2
-        displayName: 'Copy dist to artifact staging directory'
-        inputs:
-          SourceFolder: '$(build.sourcesdirectory)'
-          Contents: |
-            dist/*
-          TargetFolder: '$(build.artifactstagingdirectory)'
-        condition: succeededOrFailed()
+  steps:
+  - template: pipeline-templates/build-steps.yml
 
-      - task: PublishPipelineArtifact@0
-        displayName: 'Publish pipeline artifact'
-        inputs:
-          artifactName: 'drop'
-          targetPath: '$(Build.ArtifactStagingDirectory)'
-        condition: succeededOrFailed()
-    
-    # This stage will publish to PyPi if this build was 
-    # triggered by someone publishing a release with a GitHub tag
-  - stage: Release
-    dependsOn: Build
+  # GitHub release for every merge build (dev builds are marked as prerelease)
+  - task: GitHubRelease@1
+    displayName: 'Publish GitHub release'
+    inputs:
+      gitHubConnection: 'PangaeaBuild-GitHub'
+      repositoryName: 'OneIdentity/PySafeguard'
+      action: 'create'
+      target: '$(Build.SourceVersion)'
+      tagSource: 'userSpecifiedTag'
+      tag: '$(PackageVersion)'
+      title: '$(PackageVersion)'
+      isPreRelease: ${{ not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')) }}
+      changeLogCompareToRelease: 'lastFullRelease'
+      changeLogType: 'commitBased'
+      assets: $(Build.ArtifactStagingDirectory)/dist/*
+
+  # PyPI publish only for tagged builds
+  - script: |
+      python -m pip install --upgrade twine
+    displayName: 'Install twine'
     condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
 
-    jobs:
-    - job: Publish_to_PyPi
-      steps:
-      - download: 'current'
-        artifact: 'drop'
-        displayName: 'Download artifacts for release build due to tag'
-     
-      - script: |
-          python -m pip install --upgrade pip
-          pip install twine
-        displayName: 'Install twine'
+  # Set pythonUploadServiceConnection: testPypiTania if you want to test a PyPi push
+  # but not actually push a project to PyPi OneIdentity. See Project Settings->Service Connections.
+  - task: TwineAuthenticate@1
+    displayName: 'Twine Authenticate'
+    condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
+    inputs:
+      pythonUploadServiceConnection: pypiOneIdentity
 
-      # Set pythonUploadServiceConnection: testPypiTania if you want to test a PyPi push
-      # but not actually push a project to PyPi OneIdentity. See Project Settings->Service Connections.
-      - task: TwineAuthenticate@1
-        displayName: Twine Authenticate
-        inputs:
-          pythonUploadServiceConnection: pypiOneIdentity
-    
-      - script: |
-          twine upload --verbose --config-file $(PYPIRC_PATH) $(Pipeline.Workspace)/drop/dist/*
-        displayName: Upload release to PyPi OneIdentity
+  - script: |
+      twine upload --verbose --config-file $(PYPIRC_PATH) dist/*
+    displayName: 'Upload release to PyPI'
+    condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))

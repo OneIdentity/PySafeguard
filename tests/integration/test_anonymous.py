@@ -2,7 +2,7 @@
 
 import pytest
 
-from pysafeguard import HttpMethods, PySafeguardConnection, Services
+from pysafeguard import SafeguardClient, Service
 
 pytestmark = pytest.mark.integration
 
@@ -10,8 +10,8 @@ pytestmark = pytest.mark.integration
 class TestAnonymousAccess:
     def test_notification_status(self, spp_host, spp_verify):
         """The Notification/Status endpoint should be accessible without authentication."""
-        conn = PySafeguardConnection(spp_host, spp_verify)
-        resp = conn.invoke(HttpMethods.GET, Services.NOTIFICATION, "Status")
+        client = SafeguardClient(spp_host, verify=spp_verify)
+        resp = client.get(Service.NOTIFICATION, "Status")
         assert resp.status_code == 200
         data = resp.json()
         # Status response should have appliance state information

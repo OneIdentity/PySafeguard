@@ -1,27 +1,21 @@
-from pysafeguard import *
-from src.pysafeguard import A2ATypes, SshKeyFormats
+from pysafeguard import A2AContext, A2AType
 
 # The appliance host name or IP address
-hostName = ''
+host = ""
 
-# Path to the trusted root ca of the appliance
-caFile = ''
+# Path to the trusted root CA of the appliance
+ca_file = ""
 
-# The API Key for private key retrieval via A2A
-apiKey = ''
+# The API key for API key secret retrieval via A2A
+api_key = ""
 
 # Path to the .pem file for certificate authentication
-userCertFile = ''
+cert_file = ""
 
 # Path to the corresponding .key file for certificate authentication
-userKeyFile = ''
+key_file = ""
 
-
-print('Retrieving api key secret credentials')
-
-apiKeys = PySafeguardConnection.a2a_get_credential(hostName, apiKey, userCertFile, userKeyFile, caFile, A2ATypes.APIKEYSECRET)
-print(f'API Key JSON: {apiKeys}')
-print(f'API Keys Count: {len(apiKeys)}')
-for apiKey in apiKeys:
-    print(f'Client Id: {apiKey["ClientId"]}')
-    print(f'Client Secret: {apiKey["ClientSecret"]}')
+print("Retrieving API key secret credentials")
+with A2AContext(host, cert_file, key_file, verify=ca_file) as ctx:
+    api_key_secret = ctx.retrieve_api_key_secret(api_key)
+    print(f"API Key Secret: {api_key_secret}")
