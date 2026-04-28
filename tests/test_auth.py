@@ -110,7 +110,10 @@ class TestPasswordAuthFlow:
             },
         )
 
-        with patch.object(Session, "request", side_effect=[rsts_resp, login_resp]):
+        with (
+            patch("pysafeguard.auth._resolve_provider", return_value="local"),
+            patch.object(Session, "request", side_effect=[rsts_resp, login_resp]),
+        ):
             client = SafeguardClient("host", verify=False)
             auth = PasswordAuth("local", "admin", "pass")
             token = auth.authenticate(client)
@@ -121,7 +124,10 @@ class TestPasswordAuthFlow:
         from pysafeguard.client import SafeguardClient
 
         error_resp = self._make_response(400, {"error": "invalid_request"})
-        with patch.object(Session, "request", return_value=error_resp):
+        with (
+            patch("pysafeguard.auth._resolve_provider", return_value="local"),
+            patch.object(Session, "request", return_value=error_resp),
+        ):
             client = SafeguardClient("host", verify=False)
             auth = PasswordAuth("local", "admin", "wrong")
             with pytest.raises(ApiError):
@@ -133,7 +139,10 @@ class TestPasswordAuthFlow:
         rsts_ok = self._make_response(200, {"access_token": "tok"})
         login_fail = self._make_response(400, {"Code": 60519, "Message": "Invalid STS access_token."})
 
-        with patch.object(Session, "request", side_effect=[rsts_ok, login_fail]):
+        with (
+            patch("pysafeguard.auth._resolve_provider", return_value="local"),
+            patch.object(Session, "request", side_effect=[rsts_ok, login_fail]),
+        ):
             client = SafeguardClient("host", verify=False)
             auth = PasswordAuth("local", "admin", "pass")
             with pytest.raises(ApiError):
@@ -241,3 +250,66 @@ class TestTokenAuth:
         auth.dispose()
         with pytest.raises(RuntimeError, match="disposed"):
             auth.token.get_value()
+
+
+# ---------------------------------------------------------------------------
+# Provider resolution
+# ---------------------------------------------------------------------------
+
+
+class TestResolveProvider:
+    """Test _resolve_provider — sync provider resolution with graceful fallback."""
+
+    def test_resolves_provider_name(self):
+        from pysafeguard.auth import _resolve_provider
+
+        providers = [{"Name": "Local", "RstsProviderId": "local"}]
+        mock_resp = MagicMock()
+        mock_resp.ok = True
+        mock_resp.json.return_value = providers
+
+        with patch("pysafeguard.auth._requests.get", return_value=mock_resp):
+            result = _resolve_provider("host", "v4", "Local", False)
+        assert result == "local"
+
+    def test_falls_back_on_http_error(self):
+        from pysafeguard.auth import _resolve_provider
+
+        mock_resp = MagicMock()
+        mock_resp.ok = False
+        mock_resp.status_code = 500
+
+        with patch("pysafeguard.auth._requests.get", return_value=mock_resp):
+            result = _resolve_provider("host", "v4", "my-provider", False)
+        assert result == "my-provider"
+
+    def test_falls_back_on_connection_error(self):
+        from pysafeguard.auth import _resolve_provider
+
+        with patch("pysafeguard.auth._requests.get", side_effect=ConnectionError("refused")):
+            result = _resolve_provider("host", "v4", "my-provider", False)
+        assert result == "my-provider"
+
+    def test_falls_back_on_non_list_response(self):
+        from pysafeguard.auth import _resolve_provider
+
+        mock_resp = MagicMock()
+        mock_resp.ok = True
+        mock_resp.json.return_value = {"error": "unexpected"}
+
+        with patch("pysafeguard.auth._requests.get", return_value=mock_resp):
+            result = _resolve_provider("host", "v4", "my-provider", False)
+        assert result == "my-provider"
+
+    def test_raises_on_no_match(self):
+        """When the API succeeds but provider isn't found, raise (not fallback)."""
+        from pysafeguard.auth import _resolve_provider
+
+        providers = [{"Name": "Local", "RstsProviderId": "local"}]
+        mock_resp = MagicMock()
+        mock_resp.ok = True
+        mock_resp.json.return_value = providers
+
+        with patch("pysafeguard.auth._requests.get", return_value=mock_resp):
+            with pytest.raises(SafeguardError, match="Unable to find provider"):
+                _resolve_provider("host", "v4", "nonexistent", False)

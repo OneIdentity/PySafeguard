@@ -147,6 +147,12 @@ class TestMatchProvider:
         with pytest.raises(Exception, match="Unable to find provider"):
             _match_provider(self.PROVIDERS, "nonexistent")
 
+    def test_no_match_error_format(self):
+        """Error message should list providers in 'RstsProviderId [Name]' format (matching safeguard-ps)."""
+        providers = [{"Name": "Local", "RstsProviderId": "local"}]
+        with pytest.raises(Exception, match=r"local \[Local\]"):
+            _match_provider(providers, "nonexistent")
+
     def test_empty_list_raises(self):
         with pytest.raises(Exception, match="Unable to find provider"):
             _match_provider([], "local")

@@ -190,22 +190,26 @@ async def _async_resolve_identity_provider(
     ssl_context: ssl.SSLContext | bool,
     timeout: ClientTimeout,
 ) -> str:
-    """Resolve a provider name/ID to an rSTS provider ID (async)."""
-    url = f"https://{appliance}/service/core/{api_version}/AuthenticationProviders"
-    async with session.get(url, headers={"Accept": "application/json"}, ssl=ssl_context, timeout=timeout) as resp:
-        if resp.status >= 400:
-            text = await resp.text()
-            raise SafeguardError(
-                f"Failed to retrieve authentication providers: {resp.status} {text}",
-                status_code=resp.status,
-                response_body=text,
-            )
-        providers: object = await resp.json()
+    """Resolve a provider name/ID to an rSTS provider ID (async).
 
-    if not isinstance(providers, list):
-        raise SafeguardError("Unexpected response from AuthenticationProviders endpoint")
+    Falls back to using the provider string as-is if the providers endpoint
+    is unreachable or returns unexpected data.
+    """
+    try:
+        url = f"https://{appliance}/service/core/{api_version}/AuthenticationProviders"
+        async with session.get(url, headers={"Accept": "application/json"}, ssl=ssl_context, timeout=timeout) as resp:
+            if resp.status >= 400:
+                return provider
+            providers: object = await resp.json()
 
-    return _match_provider(providers, provider)
+        if not isinstance(providers, list):
+            return provider
+
+        return _match_provider(providers, provider)
+    except SafeguardError:
+        raise
+    except Exception:
+        return provider
 
 
 async def _async_post_authorization_code(

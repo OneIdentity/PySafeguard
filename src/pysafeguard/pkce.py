@@ -233,7 +233,7 @@ def _match_provider(providers: list[object], provider: str) -> str:
             if provider_lower in rsts_id.lower():
                 return rsts_id
 
-    known = [f"{p.get('Name', '?')} ({p.get('RstsProviderId', '?')})" for p in providers if isinstance(p, dict)]
+    known = [f"{p.get('RstsProviderId', '?')} [{p.get('Name', '?')}]" for p in providers if isinstance(p, dict)]
     raise SafeguardError(f"Unable to find provider matching '{provider}' in [{', '.join(known)}]")
 
 
@@ -336,23 +336,26 @@ def _extract_authorization_code(response_body: str) -> str:
 def _resolve_identity_provider(session: Session, appliance: str, api_version: str, provider: str, verify: bool | str) -> str:
     """Resolve a provider name/ID to an rSTS provider ID.
 
-    Matches by: exact RstsProviderId, then exact Name, then substring of RstsProviderId.
+    Matches by: exact RstsProviderId, then exact Name, then substring of
+    RstsProviderId. Falls back to using the provider string as-is if the
+    providers endpoint is unreachable or returns unexpected data.
     """
-    url = f"https://{appliance}/service/core/{api_version}/AuthenticationProviders"
-    resp = session.get(url, headers={"Accept": "application/json"}, timeout=DEFAULT_TIMEOUT)
+    try:
+        url = f"https://{appliance}/service/core/{api_version}/AuthenticationProviders"
+        resp = session.get(url, headers={"Accept": "application/json"}, timeout=DEFAULT_TIMEOUT)
 
-    if not resp.ok:
-        raise SafeguardError(
-            f"Failed to retrieve authentication providers: {resp.status_code} {resp.text}",
-            status_code=resp.status_code,
-            response_body=resp.text,
-        )
+        if not resp.ok:
+            return provider
 
-    providers: object = resp.json()
-    if not isinstance(providers, list):
-        raise SafeguardError("Unexpected response from AuthenticationProviders endpoint")
+        providers: object = resp.json()
+        if not isinstance(providers, list):
+            return provider
 
-    return _match_provider(providers, provider)
+        return _match_provider(providers, provider)
+    except SafeguardError:
+        raise
+    except Exception:
+        return provider
 
 
 def _post_authorization_code(session: Session, appliance: str, code: str, code_verifier: str) -> str:

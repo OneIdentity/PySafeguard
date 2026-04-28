@@ -19,7 +19,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
+import requests as _requests
+
+from .errors import SafeguardError
 from .hidden_string import HiddenString
+from .pkce import _match_provider
 from .utility import JsonType
 
 if TYPE_CHECKING:
@@ -66,6 +70,69 @@ class Auth(Protocol):
     async def async_refresh(self, client: AsyncSafeguardClient) -> str:
         """Async variant of :meth:`refresh`."""
         ...
+
+
+# ---------------------------------------------------------------------------
+# Provider resolution
+# ---------------------------------------------------------------------------
+
+_PROVIDER_TIMEOUT = 300
+
+
+def _resolve_provider(host: str, api_version: str, provider: str, verify: bool | str) -> str:
+    """Resolve a provider name/ID to an rSTS provider ID (sync).
+
+    Queries the AuthenticationProviders endpoint and matches using the
+    same 3-pass logic as safeguard-ps. Falls back to the provider
+    string as-is if the endpoint is unreachable.
+    """
+    try:
+        url = f"https://{host}/service/core/{api_version}/AuthenticationProviders"
+        resp = _requests.get(url, headers={"Accept": "application/json"}, verify=verify, timeout=_PROVIDER_TIMEOUT)
+        if not resp.ok:
+            return provider
+        providers: object = resp.json()
+        if not isinstance(providers, list):
+            return provider
+        return _match_provider(providers, provider)
+    except SafeguardError:
+        raise
+    except Exception:
+        return provider
+
+
+async def _async_resolve_provider(host: str, api_version: str, provider: str, verify: bool | str) -> str:
+    """Resolve a provider name/ID to an rSTS provider ID (async).
+
+    Async mirror of :func:`_resolve_provider`.
+    """
+    import ssl
+
+    from aiohttp import ClientSession, ClientTimeout, CookieJar
+    from truststore import SSLContext
+
+    try:
+        ssl_ctx: ssl.SSLContext | bool = False
+        if verify is not False:
+            ssl_ctx = SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            if isinstance(verify, str):
+                ssl_ctx.load_verify_locations(verify)
+
+        timeout = ClientTimeout(total=_PROVIDER_TIMEOUT)
+        url = f"https://{host}/service/core/{api_version}/AuthenticationProviders"
+        async with ClientSession(cookie_jar=CookieJar(unsafe=True)) as session:
+            async with session.get(url, headers={"Accept": "application/json"}, ssl=ssl_ctx, timeout=timeout) as resp:
+                if resp.status >= 400:
+                    return provider
+                providers: object = await resp.json()
+
+        if not isinstance(providers, list):
+            return provider
+        return _match_provider(providers, provider)
+    except SafeguardError:
+        raise
+    except Exception:
+        return provider
 
 
 # ---------------------------------------------------------------------------
@@ -132,22 +199,24 @@ class PasswordAuth:
     def can_refresh(self) -> bool:
         return True
 
-    def _build_body(self) -> dict[str, str]:
+    def _build_body(self, resolved_provider: str) -> dict[str, str]:
         return {
-            "scope": f"rsts:sts:primaryproviderid:{self.provider}",
+            "scope": f"rsts:sts:primaryproviderid:{resolved_provider}",
             "grant_type": "password",
             "username": self.username,
             "password": self.password.get_value(),
         }
 
     def authenticate(self, client: SafeguardClient) -> str:
-        return _rsts_token_exchange(client, self._build_body())
+        resolved = _resolve_provider(client.host or "", client.api_version, self.provider, client.verify)
+        return _rsts_token_exchange(client, self._build_body(resolved))
 
     def refresh(self, client: SafeguardClient) -> str:
         return self.authenticate(client)
 
     async def async_authenticate(self, client: AsyncSafeguardClient) -> str:
-        return await _async_rsts_token_exchange(client, self._build_body())
+        resolved = await _async_resolve_provider(client.host or "", client.api_version, self.provider, client.verify)
+        return await _async_rsts_token_exchange(client, self._build_body(resolved))
 
     async def async_refresh(self, client: AsyncSafeguardClient) -> str:
         return await self.async_authenticate(client)
@@ -179,20 +248,22 @@ class CertificateAuth:
     def cert_tuple(self) -> tuple[str, str]:
         return (self.cert_file, self.key_file)
 
-    def _build_body(self) -> dict[str, str]:
+    def _build_body(self, resolved_provider: str) -> dict[str, str]:
         return {
-            "scope": f"rsts:sts:primaryproviderid:{self.provider}",
+            "scope": f"rsts:sts:primaryproviderid:{resolved_provider}",
             "grant_type": "client_credentials",
         }
 
     def authenticate(self, client: SafeguardClient) -> str:
-        return _rsts_token_exchange(client, self._build_body(), cert=self.cert_tuple)
+        resolved = _resolve_provider(client.host or "", client.api_version, self.provider, client.verify)
+        return _rsts_token_exchange(client, self._build_body(resolved), cert=self.cert_tuple)
 
     def refresh(self, client: SafeguardClient) -> str:
         return self.authenticate(client)
 
     async def async_authenticate(self, client: AsyncSafeguardClient) -> str:
-        return await _async_rsts_token_exchange(client, self._build_body(), cert=self.cert_tuple)
+        resolved = await _async_resolve_provider(client.host or "", client.api_version, self.provider, client.verify)
+        return await _async_rsts_token_exchange(client, self._build_body(resolved), cert=self.cert_tuple)
 
     async def async_refresh(self, client: AsyncSafeguardClient) -> str:
         return await self.async_authenticate(client)
