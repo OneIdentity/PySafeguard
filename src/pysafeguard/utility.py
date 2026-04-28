@@ -14,8 +14,8 @@ def assemble_path(*args: str | None) -> str:
     return "/".join(arg.strip("/") for arg in args if arg is not None)
 
 
-def assemble_url(netloc: str = "", path: str = "", query: Mapping[str, str] = {}, fragment: str = "", scheme: LiteralString = "https") -> str:
-    return urlunparse((scheme, netloc, path, "", urlencode(query, True), fragment))
+def assemble_url(netloc: str = "", path: str = "", query: Mapping[str, str] | None = None, fragment: str = "", scheme: LiteralString = "https") -> str:
+    return urlunparse((scheme, netloc, path, "", urlencode(query, True) if query else "", fragment))
 
 
 def get_access_token(data: JsonType) -> str:
