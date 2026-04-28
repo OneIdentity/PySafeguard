@@ -11,10 +11,10 @@ keywords = ["safeguard", "oneidentity"]
 license = "Apache"
 repository = "https://github.com/OneIdentity/PySafeguard"
 authors = [
-    { name = "Tania Engel", email = "Tania.Engel@oneidentity.com" }
+    { name = "Dan Peterson", email = "Dan.Peterson@oneidentity.com" }
 ]
 maintainers = [
-    { name = "Stephanie Zinn", email = "Stephanie.Zinn@oneidentity.com" }
+    { name = "Dan Peterson", email = "Dan.Peterson@oneidentity.com" }
 ]
 requires-python = ">=3.10"
 classifiers = [

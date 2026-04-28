@@ -72,7 +72,7 @@ jobs:
     displayName: 'Install twine'
     condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
 
-  # Set pythonUploadServiceConnection: testPypiTania if you want to test a PyPi push
+  # Set pythonUploadServiceConnection to a test service connection if you want to test a PyPI push
   # but not actually push a project to PyPi OneIdentity. See Project Settings->Service Connections.
   - task: TwineAuthenticate@1
     displayName: 'Twine Authenticate'
