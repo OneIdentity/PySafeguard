@@ -1,20 +1,21 @@
-from pysafeguard import *
+from pysafeguard import A2AContext
 
 # The appliance host name or IP address
-hostName = ''
+host = ""
 
-# Path to the trusted root ca of the appliance
-caFile = ''
+# Path to the trusted root CA of the appliance
+ca_file = ""
 
-# The API Key for private key retrieval via A2A
-apiKey = ''
+# The API key for password retrieval via A2A
+api_key = ""
 
 # Path to the .pem file for certificate authentication
-userCertFile = ''
+cert_file = ""
 
 # Path to the corresponding .key file for certificate authentication
-userKeyFile = ''
+key_file = ""
 
-print('Retrieving password credential')
-password = PySafeguardConnection.a2a_get_credential(hostName, apiKey, userCertFile, userKeyFile, caFile)
-print(f'Password: {password}')
+print("Retrieving password credential")
+with A2AContext(host, cert_file, key_file, verify=ca_file) as ctx:
+    password = ctx.retrieve_password(api_key)
+    print(f"Password: {password}")

@@ -1,39 +1,33 @@
-from pysafeguard import *
 import json
 
+from pysafeguard import SafeguardClient, PasswordAuth, Service
+
 # The appliance host name or IP address
-hostName = ''
+host = ""
 
 # The user name for password authentication
-userName = ''
+username = ""
 
 # The password for password authentication
-password = ''
+password = ""
 
-# Path to the trusted root ca of the appliance
-caFile = ''
+# Path to the trusted root CA of the appliance
+ca_file = ""
 
 user = {
-    'PrimaryAuthenticationProvider': { 'Id': -1 },
-    'Name': 'MyNewUser'
+    "PrimaryAuthenticationProvider": {"Id": -1},
+    "Name": "MyNewUser",
 }
-newuserpassword = 'MyNewUser123'
+new_user_password = "MyNewUser123"
 
-print('Connecting to Safeguard')
-connection = PySafeguardConnection(hostName, caFile)
+with SafeguardClient(host, auth=PasswordAuth("local", username, password), verify=ca_file) as client:
+    print("Creating new user")
+    result = client.post(Service.CORE, "Users", json=user).json()
+    user_id = result["Id"]
 
-print('Logging in')
-connection.connect_password(userName, password)
+    print("Setting password for user")
+    client.put(Service.CORE, f"Users/{user_id}/Password", data=new_user_password)
 
-print('Creating new user')
-result = connection.invoke(HttpMethods.POST, Services.CORE, 'Users', body=user).json()
-
-# Gets the ID of newly created user
-userId = result.get('Id')
-
-print('Creating password for user')
-connection.invoke(HttpMethods.PUT, Services.CORE, f'Users/{userId}/Password', body=newuserpassword)
-
-print('Getting newly created user')
-result = connection.invoke(HttpMethods.GET, Services.CORE, f'Users/{userId}')
-print(json.dumps(result.json(),indent=2,sort_keys=True))
+    print("Getting newly created user")
+    result = client.get(Service.CORE, f"Users/{user_id}")
+    print(json.dumps(result.json(), indent=2, sort_keys=True))

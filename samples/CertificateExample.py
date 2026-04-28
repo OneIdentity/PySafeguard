@@ -1,28 +1,24 @@
-from pysafeguard import *
 import json
 
-# The appliance host name or IP address
-hostName = ''
+from pysafeguard import SafeguardClient, CertificateAuth, Service
 
-# Path to the trusted root ca of the appliance
-caFile = ''
+# The appliance host name or IP address
+host = ""
+
+# Path to the trusted root CA of the appliance
+ca_file = ""
 
 # Path to the .pem file for certificate authentication
-userCertFile = ''
+cert_file = ""
 
 # Path to the corresponding .key file for certificate authentication
-userKeyFile = ''
+key_file = ""
 
-print('Connecting to Safeguard')
-connection = PySafeguardConnection(hostName, caFile)
+with SafeguardClient(host, auth=CertificateAuth(cert_file, key_file), verify=ca_file) as client:
+    print("Getting me")
+    result = client.get(Service.CORE, "Me")
+    print(json.dumps(result.json(), indent=2, sort_keys=True))
 
-print('Logging in')
-connection.connect_certificate(userCertFile, userKeyFile)
-
-print('Getting me')
-result = connection.invoke(HttpMethods.GET, Services.CORE, 'Me')
-print(json.dumps(result.json(),indent=2,sort_keys=True))
-
-print('Getting login time remaining')
-minutes_left = connection.get_remaining_token_lifetime()
-print(f'Time remaining: {minutes_left}')
+    print("Getting login time remaining")
+    minutes_left = client.token_lifetime_remaining
+    print(f"Time remaining: {minutes_left}")
