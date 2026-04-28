@@ -97,7 +97,24 @@ following methods to establish trust.
 
 ## Getting Started
 
-A simple code example for calling the Safeguard API with username and password authentication through the local Safeguard STS:
+> **Note:** Recent versions of Safeguard have Resource Owner Grant (ROG)
+> disabled by default. This means `PasswordAuth` will not work unless ROG has
+> been explicitly enabled on the appliance. **`PkceAuth` is the recommended
+> authentication method** and works regardless of the ROG setting.
+
+PKCE authentication (recommended):
+
+```Python
+from pysafeguard import SafeguardClient, PkceAuth, Service
+
+with SafeguardClient("safeguard.sample.corp",
+                     auth=PkceAuth("local", "Admin", "Admin123"),
+                     verify="ssl/pathtoca.pem") as client:
+    me = client.get(Service.CORE, "Me", params={"fields": "DisplayName"})
+    print(f"Connected to Safeguard as {me.json()['DisplayName']}")
+```
+
+Password authentication (requires ROG to be enabled on the appliance):
 
 ```Python
 from pysafeguard import SafeguardClient, PasswordAuth, Service
@@ -109,7 +126,7 @@ with SafeguardClient("safeguard.sample.corp",
     print(f"Connected to Safeguard as {me.json()['DisplayName']}")
 ```
 
-Password authentication to an external provider:
+Password authentication to an external provider (requires ROG):
 
 ```Python
 from pysafeguard import SafeguardClient, PasswordAuth
@@ -121,15 +138,16 @@ with SafeguardClient("safeguard.sample.corp",
     ...
 ```
 
-PKCE authentication (recommended for newer appliances):
+PKCE authentication to an external provider:
 
 ```Python
 from pysafeguard import SafeguardClient, PkceAuth
 
 with SafeguardClient("safeguard.sample.corp",
-                     auth=PkceAuth("local", "Admin", "Admin123"),
+                     auth=PkceAuth("myexternalprovider", "Admin", "Admin123"),
                      verify="ssl/pathtoca.pem") as client:
-    users = client.get(Service.CORE, "Users").json()
+    # client is now authenticated
+    ...
 ```
 
 Client certificate authentication using PEM and KEY files:
