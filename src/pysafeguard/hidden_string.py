@@ -38,14 +38,25 @@ class HiddenString:
         self._data: bytearray | None = bytearray(value.encode("utf-8"))
         self._disposed = False
 
-    def get_value(self) -> str:
-        """Return the plaintext value.
+    @property
+    def value(self) -> str:
+        """The plaintext value.
 
         :raises RuntimeError: If the string has been disposed.
         """
         if self._disposed or self._data is None:
             raise RuntimeError("HiddenString has been disposed")
         return self._data.decode("utf-8")
+
+    def get_value(self) -> str:
+        """Return the plaintext value.
+
+        .. deprecated:: 8.0
+            Use the :attr:`value` property instead.
+
+        :raises RuntimeError: If the string has been disposed.
+        """
+        return self.value
 
     def dispose(self) -> None:
         """Zero out and release the stored value."""

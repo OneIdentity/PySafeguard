@@ -37,7 +37,7 @@ class SshKeyFormat(StrEnum):
     PUTTY = "putty"
 
 
-# Backward-compat aliases (used by old connection.py / async_connection.py during transition)
+# Legacy aliases — deprecated in v8.0, will be removed in a future version.
 Services = Service
 HttpMethods = HttpMethod
 A2ATypes = A2AType

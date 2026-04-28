@@ -458,29 +458,29 @@ class SafeguardClient:
             cannot refresh.
         """
         from . import event
-        from .auth import CertificateAuth, PasswordAuth, PkceAuth
 
         auth = self._auth
         if auth is None:
             raise SafeguardError("No auth strategy configured for persistent event listener.")
+        if not auth.can_refresh:
+            raise SafeguardError("Auth strategy does not support refresh; cannot create persistent event listener.")
+
         host = self.host
         verify = self.verify
+        api_version = self.api_version
 
-        if isinstance(auth, PasswordAuth):
-            return event.PersistentSafeguardEventListener.from_password(host, auth.username, auth.password.get_value(), auth.provider, verify)
-        elif isinstance(auth, CertificateAuth):
-            return event.PersistentSafeguardEventListener.from_certificate(host, auth.cert_file, auth.key_file, auth.provider, verify)
-        elif isinstance(auth, PkceAuth):
-            if not auth.can_refresh:
-                raise SafeguardError("Cannot create persistent event listener for PKCE auth with MFA.")
-            from .pkce import get_pkce_token
+        def _token_factory() -> str:
+            client = SafeguardClient(host, auth=auth, verify=verify, api_version=api_version)
+            try:
+                client.login()
+                token = client.user_token
+                if token is None:
+                    raise SafeguardError("Authentication succeeded but no token was returned")
+                return token
+            finally:
+                client.close()
 
-            def _pkce_token_factory() -> str:
-                return get_pkce_token(host, auth.provider, auth.username, auth.password.get_value(), verify=verify)
-
-            return event.PersistentSafeguardEventListener(host, _pkce_token_factory, verify)
-        else:
-            raise SafeguardError("Unsupported auth strategy for persistent event listener.")
+        return event.PersistentSafeguardEventListener(host, _token_factory, verify)
 
     # -- Internal ------------------------------------------------------------
 

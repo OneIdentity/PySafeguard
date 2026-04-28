@@ -123,14 +123,6 @@ class AsyncSafeguardClient:
         token = await self._auth.async_refresh(self)
         self._set_user_token(token)
 
-    @property
-    def token_lifetime_remaining(self) -> None:
-        """Not directly available as a sync property on async client.
-
-        Use :meth:`get_token_lifetime_remaining` instead.
-        """
-        raise AttributeError("Use await client.get_token_lifetime_remaining() for async client.")
-
     async def get_token_lifetime_remaining(self) -> int | None:
         """Remaining token lifetime in minutes, or ``None`` if unavailable."""
         resp = await self.request(HttpMethod.GET, Service.APPLIANCE, "SystemTime")
