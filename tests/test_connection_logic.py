@@ -2,6 +2,10 @@
 
 These test request construction, auth flows, body handling, and error paths
 without requiring a live appliance.
+
+The sync Connection uses a persistent ``requests.Session`` internally, so all
+mocks patch ``Session.request`` (the instance method) rather than a module-level
+``request`` function.
 """
 
 import json
@@ -9,6 +13,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from requests import Session
 
 from pysafeguard.connection import Connection, WebRequestError
 from pysafeguard.data_types import HttpMethods, Services
@@ -18,7 +23,7 @@ _HTTP_REASONS = {200: "OK", 201: "Created", 204: "No Content", 400: "Bad Request
 
 
 def _make_response(status_code=200, json_data=None, headers=None, content_type="application/json; charset=utf-8", text=""):
-    """Build a fake requests.Response-like object that works as a context manager.
+    """Build a fake requests.Response-like object.
 
     Default content-type matches the real Safeguard appliance which always
     returns ``application/json; charset=utf-8``.
@@ -31,34 +36,23 @@ def _make_response(status_code=200, json_data=None, headers=None, content_type="
     resp.reason = _HTTP_REASONS.get(status_code, "Unknown")
     resp.url = "https://host/fake"
     resp.request = SimpleNamespace(method="GET")
-    # Support `with request(...) as resp:` context manager protocol
-    resp.__enter__ = lambda s: resp
-    resp.__exit__ = lambda s, *args: False
     return resp
 
 
 class TestInvokeUrlConstruction:
     """Verify invoke() builds the correct URL for various service/endpoint combos."""
 
-    @patch("pysafeguard.connection.request")
+    @patch.object(Session, "request", return_value=_make_response())
     def test_core_endpoint(self, mock_request):
-        mock_request.return_value.__enter__ = lambda s: _make_response()
-        mock_request.return_value.__exit__ = MagicMock(return_value=False)
-        mock_request.return_value = _make_response()
-
         conn = Connection("myhost.example.com")
         conn.connect_token("tok")
+        conn.invoke(HttpMethods.GET, Services.CORE, "Users")
+        url = mock_request.call_args[0][1]
+        assert "service/core/v4/Users" in url
 
-        with patch("pysafeguard.connection.request", return_value=_make_response()) as mock_req:
-            conn.invoke(HttpMethods.GET, Services.CORE, "Users")
-            call_args = mock_req.call_args
-            url = call_args[1].get("url") if "url" in (call_args[1] or {}) else call_args[0][1]
-            assert "service/core/v4/Users" in url
-
-    @patch("pysafeguard.connection.request")
+    @patch.object(Session, "request", return_value=_make_response())
     def test_rsts_no_api_version(self, mock_request):
         """RSTS service should NOT include the API version in the path."""
-        mock_request.return_value = _make_response()
         conn = Connection("host")
         conn.invoke(HttpMethods.POST, Services.RSTS, "oauth2/token")
         url = mock_request.call_args[0][1]
@@ -66,27 +60,24 @@ class TestInvokeUrlConstruction:
         assert "RSTS" in url
         assert "oauth2/token" in url
 
-    @patch("pysafeguard.connection.request")
+    @patch.object(Session, "request", return_value=_make_response())
     def test_host_override(self, mock_request):
         """invoke(host=...) should override the connection's default host."""
-        mock_request.return_value = _make_response()
         conn = Connection("default-host")
         conn.invoke(HttpMethods.GET, Services.CORE, "Me", host="override-host")
         url = mock_request.call_args[0][1]
         assert "override-host" in url
         assert "default-host" not in url
 
-    @patch("pysafeguard.connection.request")
+    @patch.object(Session, "request", return_value=_make_response())
     def test_query_params(self, mock_request):
-        mock_request.return_value = _make_response()
         conn = Connection("host")
         conn.invoke(HttpMethods.GET, Services.CORE, "Users", query={"filter": "Name eq 'test'"})
         url = mock_request.call_args[0][1]
         assert "filter=" in url
 
-    @patch("pysafeguard.connection.request")
+    @patch.object(Session, "request", return_value=_make_response())
     def test_custom_api_version_override(self, mock_request):
-        mock_request.return_value = _make_response()
         conn = Connection("host", apiVersion="v4")
         conn.invoke(HttpMethods.GET, Services.CORE, "Me", apiVersion="v3")
         url = mock_request.call_args[0][1]
@@ -95,20 +86,18 @@ class TestInvokeUrlConstruction:
 
 
 class TestInvokeBodyHandling:
-    """Verify JSON vs string body handling in __execute_web_request."""
+    """Verify JSON vs string body handling in _execute_web_request."""
 
-    @patch("pysafeguard.connection.request")
+    @patch.object(Session, "request", return_value=_make_response())
     def test_post_dict_body_sent_as_json(self, mock_request):
-        mock_request.return_value = _make_response()
         conn = Connection("host")
         conn.invoke(HttpMethods.POST, Services.CORE, "Users", body={"Name": "Test"})
         _, kwargs = mock_request.call_args
         assert kwargs["json"] == {"Name": "Test"}
         assert kwargs["data"] is None
 
-    @patch("pysafeguard.connection.request")
+    @patch.object(Session, "request", return_value=_make_response())
     def test_post_string_body_sent_as_data(self, mock_request):
-        mock_request.return_value = _make_response()
         conn = Connection("host")
         conn.headers["content-type"] = "text/plain"
         conn.invoke(HttpMethods.POST, Services.CORE, "Endpoint", body="raw string")
@@ -116,17 +105,15 @@ class TestInvokeBodyHandling:
         assert kwargs["data"] == "raw string"
         assert kwargs["json"] is None
 
-    @patch("pysafeguard.connection.request")
+    @patch.object(Session, "request", return_value=_make_response())
     def test_get_with_body_none(self, mock_request):
-        mock_request.return_value = _make_response()
         conn = Connection("host")
         conn.invoke(HttpMethods.GET, Services.CORE, "Me")
         _, kwargs = mock_request.call_args
         assert kwargs["data"] is None
         assert kwargs["json"] is None
 
-    @patch("pysafeguard.connection.request")
-    def test_post_non_string_body_with_content_type_raises(self, mock_request):
+    def test_post_non_string_body_with_content_type_raises(self):
         """When content-type is already set and body is not a string, raise TypeError."""
         conn = Connection("host")
         conn.headers["content-type"] = "text/plain"
@@ -135,9 +122,8 @@ class TestInvokeBodyHandling:
 
 
 class TestInvokeHeaders:
-    @patch("pysafeguard.connection.request")
+    @patch.object(Session, "request", return_value=_make_response())
     def test_additional_headers_merged(self, mock_request):
-        mock_request.return_value = _make_response()
         conn = Connection("host")
         conn.connect_token("tok")
         conn.invoke(HttpMethods.GET, Services.CORE, "Me", additionalHeaders={"X-Custom": "value"})
@@ -146,10 +132,9 @@ class TestInvokeHeaders:
         assert headers["X-Custom"] == "value"
         assert "Bearer tok" in headers["authorization"]
 
-    @patch("pysafeguard.connection.request")
+    @patch.object(Session, "request", return_value=_make_response())
     def test_explicit_content_type_preserved(self, mock_request):
         """When content-type is explicitly provided, don't override it."""
-        mock_request.return_value = _make_response()
         conn = Connection("host")
         conn.invoke(HttpMethods.POST, Services.CORE, "Endpoint", body="xml data", additionalHeaders={"content-type": "application/xml"})
         _, kwargs = mock_request.call_args
@@ -157,8 +142,7 @@ class TestInvokeHeaders:
 
 
 class TestConnectPassword:
-    @patch("pysafeguard.connection.request")
-    def test_successful_auth_sets_token(self, mock_request):
+    def test_successful_auth_sets_token(self):
         """Simulate the two-step auth: RSTS → LoginResponse."""
         rsts_response = _make_response(200, {
             "access_token": "rsts-token",
@@ -175,27 +159,25 @@ class TestConnectPassword:
             "WebClientInactivityTimeout": 15,
             "DesktopClientInactivityTimeout": 1440,
         })
-        mock_request.side_effect = [rsts_response, login_response]
-
-        conn = Connection("host", verify=False)
-        conn.connect_password("admin", "pass")
+        with patch.object(Session, "request", side_effect=[rsts_response, login_response]):
+            conn = Connection("host", verify=False)
+            conn.connect_password("admin", "pass")
 
         assert conn.UserToken == "user-token-123"
         assert "Bearer user-token-123" in conn.headers["authorization"]
 
-    @patch("pysafeguard.connection.request")
-    def test_rsts_failure_raises(self, mock_request):
-        mock_request.return_value = _make_response(
+    def test_rsts_failure_raises(self):
+        error_resp = _make_response(
             400,
             json_data={"error": "invalid_request", "error_description": "Access denied.", "success": False},
             text='{"error":"invalid_request","error_description":"Access denied.","success":false}',
         )
-        conn = Connection("host", verify=False)
-        with pytest.raises(WebRequestError):
-            conn.connect_password("admin", "wrong")
+        with patch.object(Session, "request", return_value=error_resp):
+            conn = Connection("host", verify=False)
+            with pytest.raises(WebRequestError):
+                conn.connect_password("admin", "wrong")
 
-    @patch("pysafeguard.connection.request")
-    def test_login_response_failure_raises(self, mock_request):
+    def test_login_response_failure_raises(self):
         """RSTS succeeds but LoginResponse fails."""
         rsts_ok = _make_response(200, {
             "access_token": "rsts-token",
@@ -209,66 +191,57 @@ class TestConnectPassword:
             json_data={"Code": 60519, "Message": "Invalid STS access_token."},
             text='{"Code":60519,"Message":"Invalid STS access_token."}',
         )
-        mock_request.side_effect = [rsts_ok, login_fail]
-
-        conn = Connection("host", verify=False)
-        with pytest.raises(WebRequestError):
-            conn.connect_password("admin", "pass")
+        with patch.object(Session, "request", side_effect=[rsts_ok, login_fail]):
+            conn = Connection("host", verify=False)
+            with pytest.raises(WebRequestError):
+                conn.connect_password("admin", "pass")
 
 
 class TestGetProviderIdMocked:
-    @patch("pysafeguard.connection.request")
-    def test_finds_provider_case_insensitive(self, mock_request):
+    def test_finds_provider_case_insensitive(self):
         providers = [
             {"Id": -1, "Name": "Local", "TypeReferenceName": "Local", "IdentityProviderId": -1, "RstsProviderId": "local", "RstsProviderScope": "rsts:sts:primaryproviderid:local", "ForceAsDefault": False},
             {"Id": -2, "Name": "Certificate", "TypeReferenceName": "Certificate", "IdentityProviderId": -2, "RstsProviderId": "certificate", "RstsProviderScope": "rsts:sts:primaryproviderid:certificate", "ForceAsDefault": False},
         ]
-        mock_request.return_value = _make_response(200, providers)
+        with patch.object(Session, "request", return_value=_make_response(200, providers)):
+            conn = Connection("host", verify=False)
+            conn.connect_token("tok")
+            result = conn.get_provider_id("local")
+            assert result == "local"
 
-        conn = Connection("host", verify=False)
-        conn.connect_token("tok")
-        result = conn.get_provider_id("local")
-        assert result == "local"
-
-    @patch("pysafeguard.connection.request")
-    def test_provider_not_found_raises(self, mock_request):
+    def test_provider_not_found_raises(self):
         providers = [
             {"Id": -1, "Name": "Local", "TypeReferenceName": "Local", "IdentityProviderId": -1, "RstsProviderId": "local", "RstsProviderScope": "rsts:sts:primaryproviderid:local", "ForceAsDefault": False},
         ]
-        mock_request.return_value = _make_response(200, providers)
-
-        conn = Connection("host", verify=False)
-        conn.connect_token("tok")
-        with pytest.raises(Exception, match="Unable to find Provider"):
-            conn.get_provider_id("nonexistent")
+        with patch.object(Session, "request", return_value=_make_response(200, providers)):
+            conn = Connection("host", verify=False)
+            conn.connect_token("tok")
+            with pytest.raises(Exception, match="Unable to find Provider"):
+                conn.get_provider_id("nonexistent")
 
 
 class TestGetRemainingTokenLifetimeMocked:
-    @patch("pysafeguard.connection.request")
-    def test_returns_minutes(self, mock_request):
+    def test_returns_minutes(self):
         resp = _make_response(
             200,
             json_data={"CurrentTime": "2026-04-27T22:19:54.6815898Z"},
             headers={"x-tokenlifetimeremaining": "1440"},
         )
-        mock_request.return_value = resp
+        with patch.object(Session, "request", return_value=resp):
+            conn = Connection("host", verify=False)
+            conn.connect_token("tok")
+            assert conn.get_remaining_token_lifetime() == 1440
 
-        conn = Connection("host", verify=False)
-        conn.connect_token("tok")
-        assert conn.get_remaining_token_lifetime() == 1440
-
-    @patch("pysafeguard.connection.request")
-    def test_returns_none_when_header_missing(self, mock_request):
+    def test_returns_none_when_header_missing(self):
         resp = _make_response(
             200,
             json_data={"CurrentTime": "2026-04-27T22:19:54.6815898Z"},
             headers={},
         )
-        mock_request.return_value = resp
-
-        conn = Connection("host", verify=False)
-        conn.connect_token("tok")
-        assert conn.get_remaining_token_lifetime() is None
+        with patch.object(Session, "request", return_value=resp):
+            conn = Connection("host", verify=False)
+            conn.connect_token("tok")
+            assert conn.get_remaining_token_lifetime() is None
 
 
 class TestA2AValidation:

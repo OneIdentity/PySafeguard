@@ -1,4 +1,9 @@
-"""Unit tests for AsyncConnection logic using mocked HTTP responses."""
+"""Unit tests for AsyncConnection logic using mocked HTTP responses.
+
+The async Connection uses a lazy ``_get_session()`` method that returns a
+persistent ``aiohttp.ClientSession``.  Tests patch ``_get_session`` to inject
+a mock session whose ``request`` method returns prepared fake responses.
+"""
 
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -29,32 +34,31 @@ def _make_async_response(status=200, json_data=None, headers=None, content_type=
     return resp
 
 
+def _mock_session_with_responses(*responses):
+    """Create a mock aiohttp session that yields the given responses in order.
+
+    Each call to ``session.request(...)`` returns an awaitable that resolves
+    to the next response.
+    """
+    it = iter(responses)
+    session = MagicMock()
+    session.request = AsyncMock(side_effect=lambda *a, **kw: next(it))
+    session.closed = False
+    return session
+
+
 class TestAsyncInvokeUrlConstruction:
     @pytest.mark.asyncio
-    @patch("pysafeguard.async_connection.SSLContext")
-    @patch("pysafeguard.async_connection.ClientSession")
-    async def test_rsts_no_api_version(self, mock_session_cls, _mock_ssl):
+    async def test_rsts_no_api_version(self):
         """RSTS service should NOT include the API version in the path."""
         resp = _make_async_response()
-        captured_args: list[tuple[object, ...]] = []
-
-        def mock_request(*args, **kwargs):
-            captured_args.append(args)
-            ctx = AsyncMock()
-            ctx.__aenter__.return_value = resp
-            ctx.__aexit__.return_value = False
-            return ctx
-
-        session_instance = MagicMock()
-        session_instance.request = mock_request
-        session_ctx = MagicMock()
-        session_ctx.__aenter__ = AsyncMock(return_value=session_instance)
-        session_ctx.__aexit__ = AsyncMock(return_value=False)
-        mock_session_cls.return_value = session_ctx
+        session = _mock_session_with_responses(resp)
 
         conn = AsyncConnection("host", verify=False)
-        await conn.invoke(HttpMethods.POST, Services.RSTS, "oauth2/token")
-        url = captured_args[0][1]
+        with patch.object(conn, "_get_session", return_value=session):
+            await conn.invoke(HttpMethods.POST, Services.RSTS, "oauth2/token")
+
+        url = session.request.call_args[0][1]
         assert "v4" not in url
         assert "RSTS" in url
         assert "oauth2/token" in url
@@ -62,9 +66,7 @@ class TestAsyncInvokeUrlConstruction:
 
 class TestAsyncConnectPassword:
     @pytest.mark.asyncio
-    @patch("pysafeguard.async_connection.SSLContext")
-    @patch("pysafeguard.async_connection.ClientSession")
-    async def test_successful_auth_sets_token(self, mock_session_cls, _mock_ssl):
+    async def test_successful_auth_sets_token(self):
         """Simulate the two-step auth: RSTS → LoginResponse."""
         rsts_resp = _make_async_response(200, {
             "access_token": "rsts-token",
@@ -81,50 +83,25 @@ class TestAsyncConnectPassword:
             "WebClientInactivityTimeout": 15,
             "DesktopClientInactivityTimeout": 1440,
         })
-        responses = iter([rsts_resp, login_resp])
-
-        def mock_request(*args, **kwargs):
-            ctx = AsyncMock()
-            ctx.__aenter__.return_value = next(responses)
-            ctx.__aexit__.return_value = False
-            return ctx
-
-        session_instance = MagicMock()
-        session_instance.request = mock_request
-        session_ctx = MagicMock()
-        session_ctx.__aenter__ = AsyncMock(return_value=session_instance)
-        session_ctx.__aexit__ = AsyncMock(return_value=False)
-        mock_session_cls.return_value = session_ctx
+        session = _mock_session_with_responses(rsts_resp, login_resp)
 
         conn = AsyncConnection("host", verify=False)
-        await conn.connect_password("admin", "pass")
+        with patch.object(conn, "_get_session", return_value=session):
+            await conn.connect_password("admin", "pass")
         assert conn.UserToken == "user-token-456"
 
     @pytest.mark.asyncio
-    @patch("pysafeguard.async_connection.SSLContext")
-    @patch("pysafeguard.async_connection.ClientSession")
-    async def test_rsts_failure_raises(self, mock_session_cls, _mock_ssl):
+    async def test_rsts_failure_raises(self):
         error_resp = _make_async_response(
             400,
             json_data={"error": "invalid_request", "error_description": "Access denied.", "success": False},
         )
-
-        def mock_request(*args, **kwargs):
-            ctx = AsyncMock()
-            ctx.__aenter__.return_value = error_resp
-            ctx.__aexit__.return_value = False
-            return ctx
-
-        session_instance = MagicMock()
-        session_instance.request = mock_request
-        session_ctx = MagicMock()
-        session_ctx.__aenter__ = AsyncMock(return_value=session_instance)
-        session_ctx.__aexit__ = AsyncMock(return_value=False)
-        mock_session_cls.return_value = session_ctx
+        session = _mock_session_with_responses(error_resp)
 
         conn = AsyncConnection("host", verify=False)
-        with pytest.raises(AsyncWebRequestError):
-            await conn.connect_password("admin", "wrong")
+        with patch.object(conn, "_get_session", return_value=session):
+            with pytest.raises(AsyncWebRequestError):
+                await conn.connect_password("admin", "wrong")
 
 
 class TestAsyncA2AValidation:
