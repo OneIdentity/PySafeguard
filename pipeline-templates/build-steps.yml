@@ -22,16 +22,16 @@ steps:
       -IsTagBuild $(isTagBuild)
 
 - script: |
-    ruff check src/
-    ruff format --check src/
+    poetry run ruff check src/
+    poetry run ruff format --check src/
   displayName: 'Lint with ruff'
 
 - script: |
-    mypy src/
+    poetry run mypy src/
   displayName: 'Type check with mypy'
 
 - script: |
-    python -m pytest tests/ -m "not integration" --tb=short -q
+    poetry run python -m pytest tests/ -m "not integration" --tb=short -q
   displayName: 'Run unit tests'
 
 - script: |
