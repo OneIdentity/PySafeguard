@@ -72,6 +72,31 @@ class HiddenString:
     def __bool__(self) -> bool:
         return not self._disposed and self._data is not None and len(self._data) > 0
 
+    def __len__(self) -> int:
+        """Return the length of the stored value (or 0 if disposed)."""
+        if self._disposed or self._data is None:
+            return 0
+        return len(self._data)
+
+    def __eq__(self, other: object) -> bool:
+        """Compare two HiddenStrings by their underlying value."""
+        if not isinstance(other, HiddenString):
+            return NotImplemented
+        if self._disposed or other._disposed:
+            return self._disposed and other._disposed
+        return self._data == other._data
+
+    def __hash__(self) -> int:
+        raise TypeError("unhashable type: 'HiddenString'")
+
+    def __enter__(self) -> HiddenString:
+        """Context manager entry — returns self."""
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        """Context manager exit — disposes the secret."""
+        self.dispose()
+
     # Block serialization and copying to prevent secret leakage
 
     def __reduce_ex__(self, protocol: SupportsIndex) -> Any:

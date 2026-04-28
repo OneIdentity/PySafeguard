@@ -83,3 +83,60 @@ class TestHiddenStringSerializationBlocked:
         hs = HiddenString("secret")
         with pytest.raises(TypeError, match="deep-copied"):
             copy.deepcopy(hs)
+
+
+class TestHiddenStringLen:
+    def test_len_non_empty(self):
+        assert len(HiddenString("hello")) == 5
+
+    def test_len_empty(self):
+        assert len(HiddenString("")) == 0
+
+    def test_len_after_dispose(self):
+        hs = HiddenString("test")
+        hs.dispose()
+        assert len(hs) == 0
+
+    def test_len_unicode(self):
+        hs = HiddenString("pässwörd")
+        assert len(hs) == len("pässwörd".encode("utf-8"))
+
+
+class TestHiddenStringEq:
+    def test_equal_values(self):
+        assert HiddenString("same") == HiddenString("same")
+
+    def test_unequal_values(self):
+        assert HiddenString("one") != HiddenString("two")
+
+    def test_not_equal_to_str(self):
+        assert HiddenString("test") != "test"
+
+    def test_disposed_equal_to_disposed(self):
+        a, b = HiddenString("a"), HiddenString("b")
+        a.dispose()
+        b.dispose()
+        assert a == b
+
+    def test_disposed_not_equal_to_live(self):
+        a = HiddenString("a")
+        b = HiddenString("a")
+        a.dispose()
+        assert a != b
+
+    def test_unhashable(self):
+        with pytest.raises(TypeError, match="unhashable"):
+            hash(HiddenString("test"))
+
+
+class TestHiddenStringContextManager:
+    def test_context_manager_disposes(self):
+        hs = HiddenString("secret")
+        with hs:
+            assert hs.get_value() == "secret"
+        assert hs.is_disposed
+
+    def test_context_manager_returns_self(self):
+        hs = HiddenString("secret")
+        with hs as h:
+            assert h is hs

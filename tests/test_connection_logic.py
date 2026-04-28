@@ -144,21 +144,27 @@ class TestInvokeHeaders:
 class TestConnectPassword:
     def test_successful_auth_sets_token(self):
         """Simulate the two-step auth: RSTS → LoginResponse."""
-        rsts_response = _make_response(200, {
-            "access_token": "rsts-token",
-            "expires_in": 299,
-            "scope": "rsts:sts:primaryproviderid:local:pwd",
-            "success": True,
-            "token_type": "Bearer",
-        })
-        login_response = _make_response(200, {
-            "Status": "Success",
-            "UserToken": "user-token-123",
-            "PrimaryProviderId": None,
-            "SecondaryProviderId": None,
-            "WebClientInactivityTimeout": 15,
-            "DesktopClientInactivityTimeout": 1440,
-        })
+        rsts_response = _make_response(
+            200,
+            {
+                "access_token": "rsts-token",
+                "expires_in": 299,
+                "scope": "rsts:sts:primaryproviderid:local:pwd",
+                "success": True,
+                "token_type": "Bearer",
+            },
+        )
+        login_response = _make_response(
+            200,
+            {
+                "Status": "Success",
+                "UserToken": "user-token-123",
+                "PrimaryProviderId": None,
+                "SecondaryProviderId": None,
+                "WebClientInactivityTimeout": 15,
+                "DesktopClientInactivityTimeout": 1440,
+            },
+        )
         with patch.object(Session, "request", side_effect=[rsts_response, login_response]):
             conn = Connection("host", verify=False)
             conn.connect_password("admin", "pass")
@@ -179,13 +185,16 @@ class TestConnectPassword:
 
     def test_login_response_failure_raises(self):
         """RSTS succeeds but LoginResponse fails."""
-        rsts_ok = _make_response(200, {
-            "access_token": "rsts-token",
-            "expires_in": 299,
-            "scope": "rsts:sts:primaryproviderid:local:pwd",
-            "success": True,
-            "token_type": "Bearer",
-        })
+        rsts_ok = _make_response(
+            200,
+            {
+                "access_token": "rsts-token",
+                "expires_in": 299,
+                "scope": "rsts:sts:primaryproviderid:local:pwd",
+                "success": True,
+                "token_type": "Bearer",
+            },
+        )
         login_fail = _make_response(
             400,
             json_data={"Code": 60519, "Message": "Invalid STS access_token."},
@@ -200,8 +209,24 @@ class TestConnectPassword:
 class TestGetProviderIdMocked:
     def test_finds_provider_case_insensitive(self):
         providers = [
-            {"Id": -1, "Name": "Local", "TypeReferenceName": "Local", "IdentityProviderId": -1, "RstsProviderId": "local", "RstsProviderScope": "rsts:sts:primaryproviderid:local", "ForceAsDefault": False},
-            {"Id": -2, "Name": "Certificate", "TypeReferenceName": "Certificate", "IdentityProviderId": -2, "RstsProviderId": "certificate", "RstsProviderScope": "rsts:sts:primaryproviderid:certificate", "ForceAsDefault": False},
+            {
+                "Id": -1,
+                "Name": "Local",
+                "TypeReferenceName": "Local",
+                "IdentityProviderId": -1,
+                "RstsProviderId": "local",
+                "RstsProviderScope": "rsts:sts:primaryproviderid:local",
+                "ForceAsDefault": False,
+            },
+            {
+                "Id": -2,
+                "Name": "Certificate",
+                "TypeReferenceName": "Certificate",
+                "IdentityProviderId": -2,
+                "RstsProviderId": "certificate",
+                "RstsProviderScope": "rsts:sts:primaryproviderid:certificate",
+                "ForceAsDefault": False,
+            },
         ]
         with patch.object(Session, "request", return_value=_make_response(200, providers)):
             conn = Connection("host", verify=False)
@@ -211,7 +236,15 @@ class TestGetProviderIdMocked:
 
     def test_provider_not_found_raises(self):
         providers = [
-            {"Id": -1, "Name": "Local", "TypeReferenceName": "Local", "IdentityProviderId": -1, "RstsProviderId": "local", "RstsProviderScope": "rsts:sts:primaryproviderid:local", "ForceAsDefault": False},
+            {
+                "Id": -1,
+                "Name": "Local",
+                "TypeReferenceName": "Local",
+                "IdentityProviderId": -1,
+                "RstsProviderId": "local",
+                "RstsProviderScope": "rsts:sts:primaryproviderid:local",
+                "ForceAsDefault": False,
+            },
         ]
         with patch.object(Session, "request", return_value=_make_response(200, providers)):
             conn = Connection("host", verify=False)

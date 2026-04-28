@@ -4,12 +4,11 @@ These are pure-logic tests that do not require signalrcore or a live appliance.
 """
 
 import json
-import warnings
 
 import pytest
 
 from pysafeguard.event import EventHandlerRegistry, EventListenerState, PersistentSafeguardEventListener, SafeguardEventListener
-from pysafeguard.exceptions import SafeguardException
+from pysafeguard.errors import SafeguardError
 
 
 # ---------------------------------------------------------------------------
@@ -195,11 +194,11 @@ class TestSafeguardEventListener:
         from unittest.mock import patch
 
         def fake_import():
-            raise SafeguardException("SignalR support requires the 'signalr' extra.")
+            raise SafeguardError("SignalR support requires the 'signalr' extra.")
 
         listener = SafeguardEventListener("h", "t")
         with patch.object(event_mod, "_import_hub_builder", side_effect=fake_import):
-            with pytest.raises(SafeguardException, match="signalr"):
+            with pytest.raises(SafeguardError, match="signalr"):
                 listener.start()
 
     def test_context_manager_calls_stop(self):
@@ -294,60 +293,28 @@ class TestPersistentSafeguardEventListener:
 
 class TestConnectionEventListenerFactory:
     def test_get_event_listener_without_token_raises(self):
-        from pysafeguard.connection import Connection
+        from pysafeguard.client import SafeguardClient
 
-        conn = Connection("host")
-        with pytest.raises(SafeguardException, match="no user token"):
-            conn.get_event_listener()
+        client = SafeguardClient("host")
+        with pytest.raises(SafeguardError, match="no user token"):
+            client.get_event_listener()
 
     def test_get_event_listener_with_token(self):
-        from pysafeguard.connection import Connection
+        from pysafeguard.client import SafeguardClient
 
-        conn = Connection("host")
-        conn.UserToken = "fake-token"
-        listener = conn.get_event_listener()
+        client = SafeguardClient("host")
+        client._set_user_token("fake-token")
+        listener = client.get_event_listener()
         assert isinstance(listener, SafeguardEventListener)
         assert listener._access_token == "fake-token"
         assert listener._host == "host"
 
-    def test_get_persistent_without_credentials_raises(self):
-        from pysafeguard.connection import Connection
+    def test_get_persistent_without_auth_raises(self):
+        from pysafeguard.client import SafeguardClient
 
-        conn = Connection("host")
-        with pytest.raises(SafeguardException, match="No stored credentials"):
-            conn.get_persistent_event_listener()
-
-
-# ---------------------------------------------------------------------------
-# Deprecated PySafeguardConnection methods
-# ---------------------------------------------------------------------------
+        client = SafeguardClient("host")
+        with pytest.raises(SafeguardError, match="No auth strategy"):
+            client.get_persistent_event_listener()
 
 
-class TestDeprecatedSignalR:
-    def test_register_signalr_username_emits_deprecation(self):
-        from pysafeguard import PySafeguardConnection
-
-        conn = PySafeguardConnection("host")
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            try:
-                PySafeguardConnection.register_signalr_username(conn, lambda r: None, "user", "pass")
-            except Exception:
-                pass  # Connection will fail, we only care about the warning
-            deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
-            assert len(deprecation_warnings) >= 1
-            assert "deprecated" in str(deprecation_warnings[0].message).lower()
-
-    def test_register_signalr_certificate_emits_deprecation(self):
-        from pysafeguard import PySafeguardConnection
-
-        conn = PySafeguardConnection("host")
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            try:
-                PySafeguardConnection.register_signalr_certificate(conn, lambda r: None, "cert", "key")
-            except Exception:
-                pass
-            deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
-            assert len(deprecation_warnings) >= 1
-            assert "deprecated" in str(deprecation_warnings[0].message).lower()
+# NOTE: TestDeprecatedSignalR removed in v8.0 — PySafeguardConnection was deleted.

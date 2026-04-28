@@ -93,9 +93,7 @@ class TestGenerateCodeChallenge:
 
 class TestExtractAuthorizationCode:
     def test_extracts_code_from_relying_party_url(self):
-        body = json.dumps({
-            "RelyingPartyUrl": "https://host/callback?code=abc123&state=xyz"
-        })
+        body = json.dumps({"RelyingPartyUrl": "https://host/callback?code=abc123&state=xyz"})
         assert _extract_authorization_code(body) == "abc123"
 
     def test_missing_relying_party_url_raises(self):
@@ -104,9 +102,7 @@ class TestExtractAuthorizationCode:
             _extract_authorization_code(body)
 
     def test_missing_code_param_raises(self):
-        body = json.dumps({
-            "RelyingPartyUrl": "https://host/callback?state=xyz"
-        })
+        body = json.dumps({"RelyingPartyUrl": "https://host/callback?state=xyz"})
         with pytest.raises(Exception, match="authorization code"):
             _extract_authorization_code(body)
 

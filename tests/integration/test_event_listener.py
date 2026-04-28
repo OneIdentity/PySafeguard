@@ -2,14 +2,13 @@
 
 These tests verify that:
 - An event listener can connect to the SignalR hub
-- Connection.get_event_listener() produces a working listener
+- SafeguardClient.get_event_listener() produces a working listener
 - PersistentSafeguardEventListener can authenticate and connect
 - State callbacks fire correctly during lifecycle
 
 Requires SPP_HOST, SPP_USERNAME, SPP_PASSWORD environment variables.
 """
 
-import threading
 import time
 
 import pytest
@@ -18,7 +17,6 @@ from pysafeguard import (
     EventListenerState,
     PersistentSafeguardEventListener,
     SafeguardEventListener,
-    connect_password,
 )
 
 pytestmark = pytest.mark.integration
@@ -95,9 +93,7 @@ class TestPersistentEventListenerIntegration:
     def test_from_password_connect(self, spp_host, spp_username, spp_password, spp_verify):
         """Persistent listener can authenticate and connect via password."""
         states = []
-        listener = PersistentSafeguardEventListener.from_password(
-            spp_host, spp_username, spp_password, verify=spp_verify
-        )
+        listener = PersistentSafeguardEventListener.from_password(spp_host, spp_username, spp_password, verify=spp_verify)
         listener.on_state_change(lambda s: states.append(s))
 
         try:
@@ -113,9 +109,7 @@ class TestPersistentEventListenerIntegration:
 
     def test_context_manager(self, spp_host, spp_username, spp_password, spp_verify):
         """Persistent listener works as a context manager."""
-        with PersistentSafeguardEventListener.from_password(
-            spp_host, spp_username, spp_password, verify=spp_verify
-        ) as listener:
+        with PersistentSafeguardEventListener.from_password(spp_host, spp_username, spp_password, verify=spp_verify) as listener:
             listener.start()
             time.sleep(1)
             assert listener.is_started
@@ -124,9 +118,7 @@ class TestPersistentEventListenerIntegration:
     def test_stop_prevents_reconnect(self, spp_host, spp_username, spp_password, spp_verify):
         """After stop(), the persistent listener does not attempt reconnection."""
         states = []
-        listener = PersistentSafeguardEventListener.from_password(
-            spp_host, spp_username, spp_password, verify=spp_verify
-        )
+        listener = PersistentSafeguardEventListener.from_password(spp_host, spp_username, spp_password, verify=spp_verify)
         listener.on_state_change(lambda s: states.append(s))
 
         listener.start()
@@ -140,10 +132,10 @@ class TestPersistentEventListenerIntegration:
 
 
 class TestConnectionGetEventListener:
-    """Test the Connection factory methods for event listeners."""
+    """Test the SafeguardClient factory methods for event listeners."""
 
     def test_get_event_listener(self, sync_connection):
-        """Connection.get_event_listener() returns a working listener."""
+        """SafeguardClient.get_event_listener() returns a working listener."""
         listener = sync_connection.get_event_listener()
         assert isinstance(listener, SafeguardEventListener)
 
@@ -152,7 +144,7 @@ class TestConnectionGetEventListener:
             assert listener.is_started
 
     def test_get_persistent_event_listener(self, sync_connection):
-        """Connection.get_persistent_event_listener() returns a working persistent listener."""
+        """SafeguardClient.get_persistent_event_listener() returns a working persistent listener."""
         listener = sync_connection.get_persistent_event_listener()
         assert isinstance(listener, PersistentSafeguardEventListener)
 

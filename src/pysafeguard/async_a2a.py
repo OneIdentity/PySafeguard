@@ -15,8 +15,10 @@ from __future__ import annotations
 import typing
 from typing import TYPE_CHECKING
 
-from .async_connection import AsyncConnection, AsyncWebRequestError
-from .data_types import A2ATypes, HttpMethods, Services, SshKeyFormats
+from .async_client import AsyncSafeguardClient
+from .auth import CertificateAuth
+from .errors import ApiError
+from .data_types import A2AType, HttpMethod, Service, SshKeyFormat
 from .hidden_string import HiddenString
 from .utility import JsonType, LiteralString
 
@@ -51,7 +53,7 @@ class AsyncA2AContext:
         self._verify = verify
         self._api_version = api_version
 
-        self._conn = AsyncConnection(host, verify=verify, apiVersion=api_version)
+        self._conn = AsyncSafeguardClient(host, verify=verify, api_version=api_version)
         self._user_authenticated = False
 
     # -- lifecycle -----------------------------------------------------------
@@ -74,7 +76,7 @@ class AsyncA2AContext:
         :param api_key: The A2A API key for the target account registration.
         :returns: The password wrapped in a :class:`~pysafeguard.HiddenString`.
         """
-        result = await self._a2a_request(api_key, a2a_type=A2ATypes.PASSWORD)
+        result = await self._a2a_request(api_key, a2a_type=A2AType.PASSWORD)
         return HiddenString(str(result) if not isinstance(result, str) else result)
 
     async def set_password(self, api_key: str, password: str) -> None:
@@ -89,15 +91,15 @@ class AsyncA2AContext:
         self,
         api_key: str,
         *,
-        key_format: SshKeyFormats = SshKeyFormats.OPENSSH,
+        key_format: SshKeyFormat = SshKeyFormat.OPENSSH,
     ) -> HiddenString:
         """Retrieve the SSH private key for the account bound to *api_key*.
 
         :param api_key: The A2A API key for the target account registration.
-        :param key_format: Key format to return (default :attr:`SshKeyFormats.OPENSSH`).
+        :param key_format: Key format to return (default :attr:`SshKeyFormat.OPENSSH`).
         :returns: The private key wrapped in a :class:`~pysafeguard.HiddenString`.
         """
-        result = await self._a2a_request(api_key, a2a_type=A2ATypes.PRIVATEKEY, key_format=key_format)
+        result = await self._a2a_request(api_key, a2a_type=A2AType.PRIVATEKEY, key_format=key_format)
         return HiddenString(str(result) if not isinstance(result, str) else result)
 
     async def set_private_key(
@@ -106,14 +108,14 @@ class AsyncA2AContext:
         private_key: str,
         passphrase: str = "",
         *,
-        key_format: SshKeyFormats = SshKeyFormats.OPENSSH,
+        key_format: SshKeyFormat = SshKeyFormat.OPENSSH,
     ) -> None:
         """Set or update the SSH key for the account bound to *api_key*.
 
         :param api_key: The A2A API key for the target account registration.
         :param private_key: The new private key value.
         :param passphrase: Optional passphrase protecting the key.
-        :param key_format: Key format (default :attr:`SshKeyFormats.OPENSSH`).
+        :param key_format: Key format (default :attr:`SshKeyFormat.OPENSSH`).
         """
         body: JsonType = {
             "Passphrase": passphrase,
@@ -123,7 +125,7 @@ class AsyncA2AContext:
             api_key,
             "Credentials/SshKey",
             body=body,
-            query={"keyFormat": key_format},
+            query={"key_format": key_format},
         )
 
     async def retrieve_api_key_secret(self, api_key: str) -> JsonType:
@@ -132,7 +134,7 @@ class AsyncA2AContext:
         :param api_key: The A2A API key for the target account registration.
         :returns: A list of API key secret objects.
         """
-        return await self._a2a_request(api_key, a2a_type=A2ATypes.APIKEYSECRET)
+        return await self._a2a_request(api_key, a2a_type=A2AType.APIKEYSECRET)
 
     async def broker_access_request(self, api_key: str, access_request: dict[str, JsonType]) -> str:
         """Submit a brokered access request through A2A.
@@ -141,16 +143,16 @@ class AsyncA2AContext:
         :param access_request: The access request payload (dict).
         :returns: The access request ID as a string.
         """
-        resp = await self._conn.invoke(
-            HttpMethods.POST,
-            Services.A2A,
+        resp = await self._conn.request(
+            HttpMethod.POST,
+            Service.A2A,
             "AccessRequests",
-            body=access_request,
-            additionalHeaders={"authorization": f"A2A {api_key}"},
+            json=access_request,
+            headers={"authorization": f"A2A {api_key}"},
             cert=self._cert,
         )
         if resp.status not in (200, 201):
-            raise AsyncWebRequestError(resp)
+            raise ApiError.from_async_response(resp)
         return str(await resp.json())
 
     # -- Discovery (Core API, lazy user auth) --------------------------------
@@ -169,9 +171,9 @@ class AsyncA2AContext:
         """
         await self._ensure_user_auth()
 
-        resp = await self._conn.invoke(HttpMethods.GET, Services.CORE, "A2ARegistrations")
+        resp = await self._conn.request(HttpMethod.GET, Service.CORE, "A2ARegistrations")
         if resp.status != 200:
-            raise AsyncWebRequestError(resp)
+            raise ApiError.from_async_response(resp)
         registrations = await resp.json()
         if not isinstance(registrations, list):
             return []
@@ -186,11 +188,11 @@ class AsyncA2AContext:
             if filter:
                 query["filter"] = filter
 
-            acct_resp = await self._conn.invoke(
-                HttpMethods.GET,
-                Services.CORE,
+            acct_resp = await self._conn.request(
+                HttpMethod.GET,
+                Service.CORE,
                 f"A2ARegistrations/{reg_id}/RetrievableAccounts",
-                query=query,
+                params=query if query else None,
             )
             if acct_resp.status != 200:
                 continue
@@ -272,7 +274,7 @@ class AsyncA2AContext:
         cert_file: str,
         key_file: str,
         *,
-        key_format: SshKeyFormats = SshKeyFormats.OPENSSH,
+        key_format: SshKeyFormat = SshKeyFormat.OPENSSH,
         verify: bool | str = True,
         api_version: LiteralString = "v4",
     ) -> HiddenString:
@@ -282,7 +284,7 @@ class AsyncA2AContext:
         :param api_key: The A2A API key.
         :param cert_file: Path to client certificate (PEM).
         :param key_file: Path to certificate key.
-        :param key_format: Key format (default :attr:`SshKeyFormats.OPENSSH`).
+        :param key_format: Key format (default :attr:`SshKeyFormat.OPENSSH`).
         :param verify: TLS verification setting.
         :param api_version: API version.
         :returns: The private key wrapped in a :class:`~pysafeguard.HiddenString`.
@@ -296,34 +298,35 @@ class AsyncA2AContext:
         """Lazily authenticate as a user via certificate for Core API access."""
         if self._user_authenticated:
             return
-        await self._conn.connect_certificate(self._cert[0], self._cert[1])
+        self._conn._auth = CertificateAuth(self._cert[0], self._cert[1])  # noqa: SLF001
+        await self._conn.login()
         self._user_authenticated = True
 
     async def _a2a_request(
         self,
         api_key: str,
         *,
-        a2a_type: A2ATypes,
-        key_format: SshKeyFormats = SshKeyFormats.OPENSSH,
+        a2a_type: A2AType,
+        key_format: SshKeyFormat = SshKeyFormat.OPENSSH,
     ) -> JsonType:
         """Execute a GET against the A2A Credentials endpoint."""
         if not api_key:
             raise ValueError("api_key must not be empty")
 
         query: dict[str, str] = {"type": a2a_type}
-        if a2a_type == A2ATypes.PRIVATEKEY:
-            query["keyFormat"] = key_format
+        if a2a_type == A2AType.PRIVATEKEY:
+            query["key_format"] = key_format
 
-        resp = await self._conn.invoke(
-            HttpMethods.GET,
-            Services.A2A,
+        resp = await self._conn.request(
+            HttpMethod.GET,
+            Service.A2A,
             "Credentials",
-            query=query,
-            additionalHeaders={"authorization": f"A2A {api_key}"},
+            params=query,
+            headers={"authorization": f"A2A {api_key}"},
             cert=self._cert,
         )
         if resp.status != 200:
-            raise AsyncWebRequestError(resp)
+            raise ApiError.from_async_response(resp)
         return typing.cast(JsonType, await resp.json())
 
     async def _a2a_put(
@@ -338,14 +341,15 @@ class AsyncA2AContext:
         if not api_key:
             raise ValueError("api_key must not be empty")
 
-        resp = await self._conn.invoke(
-            HttpMethods.PUT,
-            Services.A2A,
+        resp = await self._conn.request(
+            HttpMethod.PUT,
+            Service.A2A,
             endpoint,
-            query=query or {},
-            body=body,
-            additionalHeaders={"authorization": f"A2A {api_key}"},
+            params=query,
+            json=body if isinstance(body, dict) else None,
+            data=body if isinstance(body, str) else None,
+            headers={"authorization": f"A2A {api_key}"},
             cert=self._cert,
         )
         if resp.status not in (200, 204):
-            raise AsyncWebRequestError(resp)
+            raise ApiError.from_async_response(resp)

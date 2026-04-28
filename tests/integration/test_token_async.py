@@ -8,7 +8,7 @@ pytestmark = pytest.mark.integration
 class TestAsyncTokenLifetime:
     @pytest.mark.asyncio
     async def test_get_remaining_token_lifetime(self, async_connection):
-        remaining = await async_connection.get_remaining_token_lifetime()
+        remaining = await async_connection.get_token_lifetime_remaining()
         assert remaining is not None
         assert isinstance(remaining, int)
         assert remaining > 0

@@ -68,21 +68,27 @@ class TestAsyncConnectPassword:
     @pytest.mark.asyncio
     async def test_successful_auth_sets_token(self):
         """Simulate the two-step auth: RSTS → LoginResponse."""
-        rsts_resp = _make_async_response(200, {
-            "access_token": "rsts-token",
-            "expires_in": 299,
-            "scope": "rsts:sts:primaryproviderid:local:pwd",
-            "success": True,
-            "token_type": "Bearer",
-        })
-        login_resp = _make_async_response(200, {
-            "Status": "Success",
-            "UserToken": "user-token-456",
-            "PrimaryProviderId": None,
-            "SecondaryProviderId": None,
-            "WebClientInactivityTimeout": 15,
-            "DesktopClientInactivityTimeout": 1440,
-        })
+        rsts_resp = _make_async_response(
+            200,
+            {
+                "access_token": "rsts-token",
+                "expires_in": 299,
+                "scope": "rsts:sts:primaryproviderid:local:pwd",
+                "success": True,
+                "token_type": "Bearer",
+            },
+        )
+        login_resp = _make_async_response(
+            200,
+            {
+                "Status": "Success",
+                "UserToken": "user-token-456",
+                "PrimaryProviderId": None,
+                "SecondaryProviderId": None,
+                "WebClientInactivityTimeout": 15,
+                "DesktopClientInactivityTimeout": 1440,
+            },
+        )
         session = _mock_session_with_responses(rsts_resp, login_resp)
 
         conn = AsyncConnection("host", verify=False)

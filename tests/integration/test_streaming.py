@@ -14,7 +14,13 @@ import tempfile
 
 import pytest
 
-from pysafeguard import AsyncConnection, HttpMethods, Services, connect_password
+from pysafeguard import (
+    AsyncSafeguardClient,
+    HttpMethod,
+    PasswordAuth,
+    SafeguardClient,
+    Service,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -27,9 +33,12 @@ pytestmark = pytest.mark.integration
 @pytest.fixture(scope="module")
 def backup_id(spp_host, spp_username, spp_password, spp_verify):
     """Find an existing completed backup to use for download tests."""
-    conn = connect_password(spp_host, spp_username, spp_password, verify=spp_verify)
-    try:
-        resp = conn.invoke(HttpMethods.GET, Services.APPLIANCE, "Backups")
+    with SafeguardClient(
+        spp_host,
+        auth=PasswordAuth("local", spp_username, spp_password),
+        verify=spp_verify,
+    ) as client:
+        resp = client.get(Service.APPLIANCE, "Backups")
         backups = resp.json()
         if not isinstance(backups, list) or not backups:
             pytest.skip("No backups available on appliance for streaming tests")
@@ -37,8 +46,6 @@ def backup_id(spp_host, spp_username, spp_password, spp_verify):
         completed = [b for b in backups if b.get("Status") == "Complete"]
         backup = completed[0] if completed else backups[0]
         return backup["Id"]
-    finally:
-        conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -47,13 +54,11 @@ def backup_id(spp_host, spp_username, spp_password, spp_verify):
 
 
 class TestSyncInvokeStream:
-    """Test Connection.invoke_stream() for streaming responses."""
+    """Test SafeguardClient.stream() for streaming responses."""
 
     def test_stream_backup_download(self, sync_connection, backup_id):
-        """invoke_stream returns a response that can be iterated in chunks."""
-        resp = sync_connection.invoke_stream(
-            HttpMethods.GET, Services.APPLIANCE, f"Backups/{backup_id}/Download"
-        )
+        """stream() returns a response that can be iterated in chunks."""
+        resp = sync_connection.stream(HttpMethod.GET, Service.APPLIANCE, f"Backups/{backup_id}/Download")
         assert resp.status_code == 200
         assert resp.headers.get("content-type") == "application/octet-stream"
 
@@ -71,9 +76,7 @@ class TestSyncInvokeStream:
 
     def test_stream_response_not_buffered(self, sync_connection, backup_id):
         """The streaming response should not pre-buffer the entire body."""
-        resp = sync_connection.invoke_stream(
-            HttpMethods.GET, Services.APPLIANCE, f"Backups/{backup_id}/Download"
-        )
+        resp = sync_connection.stream(HttpMethod.GET, Service.APPLIANCE, f"Backups/{backup_id}/Download")
         assert resp.status_code == 200
         # content should not have been fully read yet
         assert resp._content_consumed is False
@@ -81,7 +84,7 @@ class TestSyncInvokeStream:
 
 
 class TestSyncDownload:
-    """Test Connection.download() for file downloads."""
+    """Test SafeguardClient.download() for file downloads."""
 
     def test_download_backup_to_file(self, sync_connection, backup_id):
         """download() writes the response body to a file."""
@@ -90,7 +93,7 @@ class TestSyncDownload:
 
         try:
             written = sync_connection.download(
-                Services.APPLIANCE,
+                Service.APPLIANCE,
                 f"Backups/{backup_id}/Download",
                 tmp_path,
             )
@@ -106,7 +109,7 @@ class TestSyncDownload:
 
         try:
             written = sync_connection.download(
-                Services.APPLIANCE,
+                Service.APPLIANCE,
                 f"Backups/{backup_id}/Download",
                 tmp_path,
                 chunk_size=4096,
@@ -118,7 +121,7 @@ class TestSyncDownload:
 
 
 class TestSyncUpload:
-    """Test Connection.upload() for file uploads."""
+    """Test SafeguardClient.upload() for file uploads."""
 
     def test_upload_bytes(self, sync_connection):
         """upload() can send raw bytes to an endpoint.
@@ -127,11 +130,8 @@ class TestSyncUpload:
         verify the upload mechanics work. Backup upload requires a valid
         .sgb file so we test the transport only.
         """
-        # Upload a small payload to verify the method works without error.
-        # We POST to Backups/Upload which will reject invalid content,
-        # but the transport layer (headers, auth, cert) should work.
         resp = sync_connection.upload(
-            Services.APPLIANCE,
+            Service.APPLIANCE,
             "Backups/Upload",
             b"not-a-real-backup",
             content_type="application/octet-stream",
@@ -147,7 +147,7 @@ class TestSyncUpload:
 
         try:
             resp = sync_connection.upload(
-                Services.APPLIANCE,
+                Service.APPLIANCE,
                 "Backups/Upload",
                 tmp_path,
                 content_type="application/octet-stream",
@@ -163,17 +163,19 @@ class TestSyncUpload:
 
 
 class TestAsyncInvokeStream:
-    """Test AsyncConnection.invoke_stream() for streaming responses."""
+    """Test AsyncSafeguardClient.stream() for streaming responses."""
 
     @pytest.mark.asyncio
     async def test_stream_backup_download(self, spp_host, spp_username, spp_password, spp_verify, backup_id):
-        """invoke_stream returns a response that can be iterated in chunks."""
-        conn = AsyncConnection(spp_host, verify=spp_verify)
-        await conn.connect_password(spp_username, spp_password)
+        """stream() returns a response that can be iterated in chunks."""
+        client = AsyncSafeguardClient(
+            spp_host,
+            auth=PasswordAuth("local", spp_username, spp_password),
+            verify=spp_verify,
+        )
+        await client.login()
         try:
-            resp = await conn.invoke_stream(
-                HttpMethods.GET, Services.APPLIANCE, f"Backups/{backup_id}/Download"
-            )
+            resp = await client.stream(HttpMethod.GET, Service.APPLIANCE, f"Backups/{backup_id}/Download")
             assert resp.status == 200
 
             chunks = []
@@ -187,24 +189,28 @@ class TestAsyncInvokeStream:
             total = sum(len(c) for c in chunks)
             assert total > 0
         finally:
-            await conn.close()
+            await client.close()
 
 
 class TestAsyncDownload:
-    """Test AsyncConnection.download() for file downloads."""
+    """Test AsyncSafeguardClient.download() for file downloads."""
 
     @pytest.mark.asyncio
     async def test_download_backup_to_file(self, spp_host, spp_username, spp_password, spp_verify, backup_id):
         """download() writes the response body to a file."""
-        conn = AsyncConnection(spp_host, verify=spp_verify)
-        await conn.connect_password(spp_username, spp_password)
+        client = AsyncSafeguardClient(
+            spp_host,
+            auth=PasswordAuth("local", spp_username, spp_password),
+            verify=spp_verify,
+        )
+        await client.login()
 
         with tempfile.NamedTemporaryFile(suffix=".sgb", delete=False) as tmp:
             tmp_path = tmp.name
 
         try:
-            written = await conn.download(
-                Services.APPLIANCE,
+            written = await client.download(
+                Service.APPLIANCE,
                 f"Backups/{backup_id}/Download",
                 tmp_path,
             )
@@ -212,24 +218,28 @@ class TestAsyncDownload:
             assert os.path.getsize(tmp_path) == written
         finally:
             os.unlink(tmp_path)
-            await conn.close()
+            await client.close()
 
 
 class TestAsyncUpload:
-    """Test AsyncConnection.upload() for file uploads."""
+    """Test AsyncSafeguardClient.upload() for file uploads."""
 
     @pytest.mark.asyncio
     async def test_upload_bytes(self, spp_host, spp_username, spp_password, spp_verify):
         """upload() can send raw bytes."""
-        conn = AsyncConnection(spp_host, verify=spp_verify)
-        await conn.connect_password(spp_username, spp_password)
+        client = AsyncSafeguardClient(
+            spp_host,
+            auth=PasswordAuth("local", spp_username, spp_password),
+            verify=spp_verify,
+        )
+        await client.login()
         try:
-            resp = await conn.upload(
-                Services.APPLIANCE,
+            resp = await client.upload(
+                Service.APPLIANCE,
                 "Backups/Upload",
                 b"not-a-real-backup",
                 content_type="application/octet-stream",
             )
             assert resp.status in (400, 403, 409, 415, 500)
         finally:
-            await conn.close()
+            await client.close()

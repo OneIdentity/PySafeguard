@@ -7,39 +7,46 @@ Requires Python ≥ 3.10. Dependencies: requests, truststore. Optional extras:
 `async` (aiohttp), `signalr` (signalrcore).
 
 The .NET counterpart of this SDK is
-[SafeguardDotNet](https://github.com/OneIdentity/SafeguardDotNet). Feature
-parity with SafeguardDotNet is a long-term goal. Refer to SafeguardDotNet's
-codebase and AGENTS.md for guidance on Safeguard API concepts, authentication
-flows, and architecture patterns that should be mirrored in Python.
+[SafeguardDotNet](https://github.com/OneIdentity/SafeguardDotNet). Refer to
+SafeguardDotNet's codebase and AGENTS.md for guidance on Safeguard API concepts
+and authentication flows.
 
 ## Project structure
 
 ```
 PySafeguard/
 |-- src/pysafeguard/                # SDK package
-|   |-- __init__.py                 # Public API: PySafeguardConnection, factory functions, SignalR helpers
-|   |-- connection.py               # Sync Connection class (requests-based)
-|   |-- async_connection.py         # Async AsyncConnection class (aiohttp-based)
-|   |-- data_types.py               # Enums: Services, HttpMethods, A2ATypes, SshKeyFormats
-|   |-- exceptions.py               # SafeguardException base, WebRequestError, AsyncWebRequestError
+|   |-- __init__.py                 # Public API with __all__
+|   |-- client.py                   # SafeguardClient (sync, requests-based)
+|   |-- async_client.py             # AsyncSafeguardClient (async, aiohttp-based)
+|   |-- auth.py                     # Auth protocol + PasswordAuth, CertificateAuth, PkceAuth, TokenAuth
+|   |-- errors.py                   # SafeguardError hierarchy (ApiError, AuthenticationError, etc.)
+|   |-- data_types.py               # Enums: Service, HttpMethod, A2AType, SshKeyFormat
+|   |-- event.py                    # SafeguardEventListener, PersistentSafeguardEventListener
+|   |-- a2a.py                      # A2AContext (sync)
+|   |-- async_a2a.py                # AsyncA2AContext (async)
 |   |-- hidden_string.py            # HiddenString wrapper for sensitive values
-|   |-- pkce.py                     # Sync PKCE non-interactive login (rSTS multi-step flow)
-|   |-- async_pkce.py               # Async PKCE non-interactive login (aiohttp-based)
+|   |-- pkce.py                     # Sync PKCE non-interactive login (internal)
+|   |-- async_pkce.py               # Async PKCE non-interactive login (internal)
 |   |-- utility.py                  # URL assembly, token extraction helpers
 |   `-- py.typed                    # PEP 561 marker for typed package
 |
-|-- samples/                        # Example scripts
-|   |-- PasswordExample.py          # Username/password authentication
-|   |-- PasswordExternalExample.py  # External provider authentication
-|   |-- CertificateExample.py       # Client certificate authentication
-|   |-- CertificateExternalExample.py # Certificate with external provider
-|   |-- AnonymousExample.py         # Unauthenticated connection
-|   |-- NewUserExample.py           # Create user and set password
-|   |-- A2APasswordExample.py       # A2A password retrieval
-|   |-- A2APrivateKeyExample.py     # A2A private key retrieval
-|   |-- A2AApiKeySecretExample.py   # A2A API key secret retrieval
-|   `-- SignalRExample.py           # SignalR event registration
+|-- tests/                          # Unit and integration tests
+|   |-- test_auth.py                # Auth strategy tests
+|   |-- test_client_new.py          # SafeguardClient init/lifecycle tests
+|   |-- test_client_request_logic.py # SafeguardClient request tests (mocked HTTP)
+|   |-- test_async_client_new.py    # AsyncSafeguardClient tests
+|   |-- test_safeguard_errors.py    # Error hierarchy tests
+|   |-- test_public_api.py          # Export surface verification
+|   |-- test_event.py               # Event listener tests
+|   |-- test_a2a.py                 # A2AContext tests
+|   |-- test_hidden_string.py       # HiddenString tests
+|   |-- test_data_types.py          # Enum tests
+|   |-- test_pkce_helpers.py        # PKCE flow tests
+|   |-- test_utility.py             # Utility function tests
+|   `-- integration/                # Live-appliance integration tests
 |
+|-- samples/                        # Example scripts
 |-- pyproject.toml                  # Project metadata, dependencies (Poetry build backend)
 |-- ruff.toml                       # Ruff linter/formatter configuration
 |-- mypy.ini                        # Mypy strict type checking configuration
@@ -76,202 +83,155 @@ mypy src/
 ```
 
 Mypy is configured in strict mode with all strict flags enabled. All code must
-pass `mypy --strict` without errors. Key mypy settings:
-- `disallow_untyped_defs = True` — every function must have type annotations
-- `strict_bytes = True`, `strict_equality = True`
-- `warn_return_any = True`, `warn_unreachable = True`
-- `ignore_missing_imports = True` — third-party stubs may not always be available
+pass `mypy --strict` without errors.
 
 Ruff enforces a line length of 160 characters.
 
-## Testing against a live appliance
-
-This SDK interacts with a live Safeguard appliance API. **There are no
-mock/unit tests.** The `samples/` directory contains example scripts that
-require a live appliance. Running samples against a live appliance is the
-primary way to validate changes.
-
-### Asking the user for appliance access
-
-**If you are making non-trivial code changes, ask the user whether they have
-access to a live Safeguard appliance for testing.** If they do, ask for:
-
-1. **Appliance address** (IP or hostname of a Safeguard for Privileged Passwords appliance)
-2. **Admin username** (typically `Admin`)
-3. **Admin password**
-4. **CA certificate path** (path to PEM file for TLS verification, or `False` to disable)
-
-This is not required for documentation or minor fixes, but it is **strongly
-encouraged** for any change that touches authentication, API calls, connection
-logic, or event handling.
-
-### Running a sample to validate
+## Testing
 
 ```bash
-cd samples/
-python PasswordExample.py
+# Run unit tests (no live appliance required)
+python -m pytest tests/ -m "not integration"
+
+# Run integration tests (requires live appliance)
+SPP_HOST=<host> SPP_USERNAME=<user> SPP_PASSWORD=<pass> python -m pytest tests/ -m integration
 ```
 
-Each sample will prompt for or require connection details. Review the sample
-source to understand required arguments.
+### Testing against a live appliance
+
+Integration tests interact with a real Safeguard appliance. **If making
+non-trivial changes to authentication, API calls, or event handling, ask the
+user for appliance access** and request: appliance address, admin username,
+admin password, and CA certificate path (or `False` to disable TLS verification).
 
 ## Architecture
 
-### Entry points
-
-- **`PySafeguardConnection`** (in `__init__.py`) — The primary public class.
-  Inherits from `Connection` and adds SignalR event registration methods.
-  Users import everything from `pysafeguard`:
-  ```python
-  from pysafeguard import *
-  ```
-
-- **`AsyncConnection`** (in `async_connection.py`) — Async variant using
-  `aiohttp`. Mirrors the sync `Connection` API but all I/O methods are
-  `async`/`await`.
-
-### Connection classes
+### Client classes
 
 | Class | Module | HTTP library | Description |
 |---|---|---|---|
-| `Connection` | `connection.py` | `requests` | Sync base connection. Auth, invoke, token management. |
-| `AsyncConnection` | `async_connection.py` | `aiohttp` | Async mirror of Connection. |
-| `PySafeguardConnection` | `__init__.py` | — | Extends `Connection` with SignalR support. |
+| `SafeguardClient` | `client.py` | `requests` | Primary sync client. Side-effect-free constructor. |
+| `AsyncSafeguardClient` | `async_client.py` | `aiohttp` | Async mirror of SafeguardClient. |
+
+### Authentication strategies
+
+Auth objects are passed to the client constructor. Each implements the `Auth`
+protocol with `authenticate()`, `refresh()`, `can_refresh`, and async variants.
+
+| Strategy | Module | Description |
+|---|---|---|
+| `PasswordAuth` | `auth.py` | Username/password (Resource Owner Grant) |
+| `CertificateAuth` | `auth.py` | Client certificate authentication |
+| `PkceAuth` | `auth.py` | PKCE non-interactive browser flow (recommended) |
+| `TokenAuth` | `auth.py` | Pre-existing bearer token (no refresh) |
+
+Secret fields (passwords, tokens) are auto-wrapped in `HiddenString`.
+
+### Usage pattern
+
+```python
+from pysafeguard import SafeguardClient, PasswordAuth, Service
+
+# Context manager auto-logs in and out
+with SafeguardClient("appliance.example.com",
+                     auth=PasswordAuth("local", "admin", "secret"),
+                     verify=False) as client:
+    users = client.get(Service.CORE, "Users").json()
+    client.post(Service.CORE, "Users", json={"Name": "NewUser"})
+```
 
 ### Authentication flow
 
-1. Call `connect_password()`, `connect_certificate()`, or `connect_token()`
-2. Password/certificate methods POST to `RSTS/oauth2/token` (Resource Owner Grant)
-3. The rSTS `access_token` is exchanged for a Safeguard `UserToken` via `Core/Token/LoginResponse`
-4. The `UserToken` is stored and sent as `Authorization: Bearer <token>` on subsequent calls
-5. `invoke()` makes HTTP requests against the Safeguard API services
+1. Construct `SafeguardClient` with an `Auth` object (no network I/O)
+2. Call `client.login()` (or use context manager which calls it automatically)
+3. Auth object POSTs to `RSTS/oauth2/token` for an rSTS access token
+4. rSTS access token is exchanged for a Safeguard `UserToken` via `Core/Token/LoginResponse`
+5. `UserToken` is sent as `Authorization: Bearer <token>` on subsequent requests
+6. `client.logout()` invalidates the token on the appliance
 
-**Note:** Resource Owner Grant (ROG) is disabled by default on newer Safeguard
-appliances. Password authentication may fail with a 400 error. PySafeguard does
-not yet support PKCE authentication — this is a feature gap compared to
-SafeguardDotNet.
+### HTTP methods
+
+```python
+client.get(service, endpoint, *, params=None, headers=None)
+client.post(service, endpoint, *, json=None, data=None, params=None, headers=None)
+client.put(service, endpoint, *, json=None, data=None, params=None, headers=None)
+client.delete(service, endpoint, *, params=None, headers=None)
+client.request(method, service, endpoint, *, ...)  # Low-level escape hatch
+```
+
+- `json=` for dict/list bodies (auto-sets content-type)
+- `data=` for raw string bodies
+- `params=` for query parameters
+- `headers=` for additional headers (merged with defaults)
+
+### Streaming
+
+```python
+client.stream(method, service, endpoint, **kwargs)   # Returns un-consumed response
+client.download(service, endpoint, file_path, **kwargs)  # Stream to file
+client.upload(service, endpoint, file_or_stream, **kwargs)  # Upload file/bytes
+```
 
 ### Safeguard API services
 
-| Service enum | URL path | Description |
+| Enum | URL path | Description |
 |---|---|---|
-| `Services.CORE` | `service/core` | Primary API: assets, users, policies, access requests |
-| `Services.APPLIANCE` | `service/appliance` | Appliance management: networking, diagnostics, backups |
-| `Services.NOTIFICATION` | `service/notification` | Anonymous status and notification endpoints |
-| `Services.A2A` | `service/a2a` | Application-to-Application credential retrieval |
-| `Services.EVENT` | `service/event` | SignalR event streaming |
-| `Services.RSTS` | `RSTS` | Embedded secure token service (authentication) |
+| `Service.CORE` | `service/core` | Primary API: assets, users, policies, access requests |
+| `Service.APPLIANCE` | `service/appliance` | Appliance management: networking, diagnostics, backups |
+| `Service.NOTIFICATION` | `service/notification` | Anonymous status and notification endpoints |
+| `Service.A2A` | `service/a2a` | Application-to-Application credential retrieval |
+| `Service.EVENT` | `service/event` | SignalR event streaming |
+| `Service.RSTS` | `RSTS` | Embedded secure token service (authentication) |
 
 The default API version is **v4**.
 
+### Error hierarchy
+
+```
+SafeguardError (base)
+├── ApiError (HTTP error responses)
+│   ├── AuthenticationError (401)
+│   ├── AuthorizationError (403)
+│   └── NotFoundError (404)
+└── TransportError (network/connection failures)
+```
+
+`ApiError.from_response(resp)` auto-maps status codes to subclasses.
+All errors carry `status_code`, `error_code`, `error_message`, `response_body`.
+
 ### A2A (Application-to-Application)
 
-`a2a_get_credential()` is a class method on both `Connection` and
-`AsyncConnection`. It uses client certificate authentication with an API key
-header (`Authorization: A2A <apiKey>`) to retrieve credentials without going
-through the standard user token flow. Supports password, private key, and API
-key secret retrieval.
+`A2AContext` and `AsyncA2AContext` use client certificate authentication with
+an API key header (`Authorization: A2A <apiKey>`) to retrieve credentials.
+Supports password, private key, and API key secret retrieval.
+
+### Event listeners
+
+- `SafeguardEventListener` — one-shot SignalR listener with token auth
+- `PersistentSafeguardEventListener` — auto-reconnecting listener that
+  re-authenticates on disconnect
+
+Created via `client.get_event_listener()` / `client.get_persistent_event_listener()`.
 
 ### PKCE non-interactive login
 
-`pkce.py` implements the full rSTS PKCE authentication flow without a browser.
-This is the **recommended** authentication method on newer appliances where
-Resource Owner Grant (ROG) is disabled by default.
-
-The flow drives the rSTS login controller through multiple steps:
-1. **Step 1 (Init)**: Provider initialization with CSRF token
-2. **Step 3 (PrimaryAuth)**: Username/password submission
-3. **Step 7 (SecondaryInit)** + **Step 5 (SecondaryAuth)**: MFA if required
-4. **Step 6 (GenerateClaims)**: Authorization code extraction
-5. **Token exchange**: Authorization code → rSTS token → Safeguard user token
-
-Key implementation details:
-- CSRF token: 32 random bytes → base64url, set as cookie on `/RSTS` path
-- Code verifier: 60 random bytes → base64url
-- Code challenge: SHA256(ASCII(verifier)) → base64url
-- Base64url: standard base64 with `+`→`-`, `/`→`_`, padding stripped
-- Provider resolution: 3-level match (exact RstsProviderId → exact Name → substring)
-- 203 from rSTS = challenge/error (handled per-step, not globally)
-- JSON responses parsed opportunistically (non-JSON means no secondary auth)
-
-### Connect factory functions
-
-Module-level convenience functions in `__init__.py` for creating connections:
-
-**Sync** (return `PySafeguardConnection` or `Connection`):
-- `connect_pkce(appliance, provider, username, password, ...)` — PKCE flow (recommended)
-- `connect_persistent(appliance, provider, username, password, ...)` — PKCE with auto-refresh
-- `connect_password(appliance, username, password, ...)` — ROG password auth
-- `connect_certificate(appliance, cert_file, key_file, ...)` — client certificate
-- `connect_token(appliance, token, ...)` — existing Safeguard API token
-- `connect_anonymous(appliance, ...)` — unauthenticated access
-
-**Async** (return `AsyncConnection`):
-- `async_connect_pkce(...)` — async PKCE flow
-- `async_connect_persistent(...)` — async PKCE with auto-refresh
-- `async_connect_password(...)` — async ROG password auth
-- `async_connect_certificate(...)` — async client certificate
-- `async_connect_token(...)` — existing token (sync, returns `AsyncConnection`)
-- `async_connect_anonymous(...)` — unauthenticated (sync, returns `AsyncConnection`)
-
-### Token refresh and lifecycle
-
-- **Credential storage**: `connect_password()`, `connect_certificate()`, and
-  `connect_pkce()` store authentication credentials internally (in frozen
-  dataclasses with `eq=False`) so that tokens can be refreshed. Sensitive fields
-  (passwords, TOTP codes) are wrapped in `HiddenString` (see below).
-- **`_replace_auth_credential()`** swaps credentials and disposes secrets from
-  the previous credential via `HiddenString.dispose()`.
-- **`_set_user_token()`** is the internal token setter that preserves refresh
-  credentials. The public `connect_token()` clears them (bare tokens can't refresh).
-- **`refresh_access_token()`** re-authenticates using stored credentials. Raises
-  `SafeguardException` if no credentials are available (e.g. `connect_token()`).
-  PKCE connections requiring MFA cannot be refreshed (one-time passwords).
-- **`logout()`** POSTs to `Token/Logout` (best-effort), then clears the local
-  token. Does **not** dispose credentials (so `refresh_access_token()` still works).
-- **Auto-refresh**: When `_auto_refresh` is `True`, `invoke()` checks
-  `get_remaining_token_lifetime()` before each API call (excluding RSTS and
-  APPLIANCE service calls to avoid recursion) and refreshes if expired.
-  `connect_persistent()` enables this flag.
+`pkce.py` (internal) implements the full rSTS PKCE authentication flow without
+a browser. This is the **recommended** method on newer appliances where Resource
+Owner Grant (ROG) is disabled by default. The flow is exposed to users via `PkceAuth`.
 
 ### HiddenString
 
-`HiddenString` (in `hidden_string.py`) is a best-effort wrapper for sensitive
-values, inspired by .NET's `SecureString`. It provides:
+`HiddenString` wraps sensitive values to prevent casual exposure in logs, repr,
+and debugger output. Uses `bytearray` storage for explicit zeroing on disposal.
+Supports context manager (`with HiddenString(...) as s:`) for scoped disposal,
+`__len__`, `__eq__`, `__bool__`, and blocks pickling/copying.
 
-- **`bytearray` storage** — mutable, so memory can be explicitly zeroed
-- **`dispose()`** — zeros the buffer and marks the string as disposed
-- **`get_value()`** — explicit access with `RuntimeError` after disposal
-- **`repr()`/`str()` protection** — always returns `***`
-- **Serialization blocking** — `__reduce_ex__`, `__copy__`, `__deepcopy__` all raise `TypeError`
+### Token refresh and lifecycle
 
-**Limitations** (documented in module docstring): Python cannot encrypt memory or
-guarantee transient copies are scrubbed. The original `str` argument, `get_value()`
-return values, and HTTP library copies exist briefly in memory. This minimizes
-the window and surface area of exposure, not eliminates it.
-
-### SignalR event listeners
-
-`PySafeguardConnection` provides two static methods for SignalR:
-- `register_signalr_username()` — authenticate with username/password, then listen
-- `register_signalr_certificate()` — authenticate with certificate, then listen
-
-Both use the `signalrcore` library. SignalR connects to `service/event/signalr`
-and listens for `ReceiveMessage` and `NotifyEventAsync` events.
-
-### Error handling
-
-- **`SafeguardException`** (in `exceptions.py`) — Base exception for all SDK errors.
-  Carries `status_code`, `error_code`, `error_message`, `response` (raw body),
-  and `has_response`. Auto-parses JSON error bodies (`Code`, `Message` fields
-  from the Safeguard API, and SPS-style `error` fields).
-- **`WebRequestError(SafeguardException)`** — raised on non-200 responses in
-  sync code. Contains the `Response` object via `req` attribute and a formatted
-  `message` string.
-- **`AsyncWebRequestError(SafeguardException)`** — async equivalent, wraps
-  `aiohttp.ClientResponse`.
-- `ValueError` is raised for validation errors (missing API key, missing cert).
-- `SafeguardException` is raised for domain errors (provider not found).
+- `client.refresh_access_token()` re-authenticates using the stored auth object
+- `client.token_lifetime_remaining` (property) checks remaining token lifetime
+- `auto_refresh=True` on construction enables automatic refresh before each request
+- `client.logout()` POSTs to `Token/Logout` then clears the local token
 
 ## Code conventions
 
@@ -280,29 +240,29 @@ and listens for `ReceiveMessage` and `NotifyEventAsync` events.
 All functions must have complete type annotations. The project uses `mypy` in
 strict mode. Use `typing.cast()` when narrowing types from JSON responses.
 
-For Python 3.10 compatibility:
-- `StrEnum` is polyfilled in `data_types.py` for Python < 3.11
-- `LiteralString` is imported from `typing_extensions` for Python < 3.11
+### Naming conventions
+
+- Classes: PascalCase (`SafeguardClient`, `PasswordAuth`)
+- Methods/functions: snake_case (`get_provider_id`, `assemble_url`)
+- Instance attributes: snake_case (`user_token`, `api_version`, `is_authenticated`)
+- Enums: Singular names with UPPER_CASE values (`Service.CORE`, `HttpMethod.GET`)
+- Private attributes: single underscore prefix (`_user_token`, `_session`)
 
 ### Docstrings
 
 Use reStructuredText-style docstrings (`:param name:`, `:returns:`). Every
 public method should have a docstring.
 
-### Naming conventions
+### Design principles
 
-- Classes: PascalCase (`Connection`, `PySafeguardConnection`)
-- Methods/functions: snake_case (`connect_password`, `assemble_url`)
-- Instance attributes: camelCase where matching the Safeguard API
-  (`UserToken`, `apiVersion`) — this is a legacy convention from the original
-  codebase
-- Enums: UPPER_CASE values (`HttpMethods.GET`, `Services.CORE`)
-- Private methods: double underscore prefix (`__connect`, `__execute_web_request`)
-
-### Import style
-
-Use explicit imports from submodules. The `__init__.py` re-exports the public
-API. Type-only imports use `typing.cast()` rather than `TYPE_CHECKING` guards.
+1. **Side-effect-free constructors** — no network I/O in `__init__`
+2. **Auth as strategy objects** — not factory functions or instance methods
+3. **Keyword-only args** — after the first 1-2 positional params
+4. **No mutable defaults** — use `None` everywhere
+5. **snake_case everything** — no exceptions
+6. **Explicit `json`/`data` split** — no magic body inference
+7. **Clean `__all__`** — typed, intentional public surface
+8. **Secret protection** — HiddenString/repr=False on all credential fields
 
 ## Versioning and release
 
@@ -319,27 +279,3 @@ pipeline uses `twine` to upload via the `pypiOneIdentity` service connection.
 
 **Do not change the version in `pyproject.toml` manually for releases.** The
 CI pipeline handles version stamping from the Git tag.
-
-## Feature gaps vs SafeguardDotNet
-
-PySafeguard is a simpler SDK compared to SafeguardDotNet. Key features present
-in SafeguardDotNet but missing from PySafeguard include:
-
-- **PKCE authentication** — SafeguardDotNet has full PKCE non-interactive login;
-  PySafeguard only supports Resource Owner Grant (which is disabled by default
-  on newer appliances)
-- **Persistent connections** — auto-refreshing token management
-  (`PersistentSafeguardConnection`)
-- **Persistent event listeners** — auto-reconnecting SignalR with exponential
-  backoff
-- **Custom exception type** — SafeguardDotNet's `SafeguardDotNetException`
-  carries HTTP status, error code, and parsed error message
-- **Management service connection** — for disaster recovery and support
-  operations
-- **SPS integration** — Safeguard for Privileged Sessions connection joining
-- **Streaming support** — streaming API responses
-- **MFA/TOTP support** — secondary authentication factor handling
-- **Access request brokering** — A2A access request broker functionality
-
-When adding new features, refer to the SafeguardDotNet implementation for
-design patterns and API contract details.

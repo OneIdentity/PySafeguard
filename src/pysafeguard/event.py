@@ -34,8 +34,8 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
-from .data_types import Services
-from .exceptions import SafeguardException
+from .data_types import Service
+from .errors import SafeguardError
 from .utility import assemble_path, assemble_url
 
 logger = logging.getLogger(__name__)
@@ -149,7 +149,7 @@ def _import_hub_builder() -> Any:
 
         return HubConnectionBuilder
     except ImportError as exc:
-        raise SafeguardException("SignalR support requires the 'signalr' extra. Install it with: pip install pysafeguard[signalr]") from exc
+        raise SafeguardError("SignalR support requires the 'signalr' extra. Install it with: pip install pysafeguard[signalr]") from exc
 
 
 # ---------------------------------------------------------------------------
@@ -210,7 +210,7 @@ class SafeguardEventListener:
     def start(self) -> None:
         """Connect to the SignalR hub and begin receiving events.
 
-        :raises SafeguardException: If signalrcore is not installed or the
+        :raises SafeguardError: If signalrcore is not installed or the
             connection cannot be established.
         """
         if self._started:
@@ -218,7 +218,7 @@ class SafeguardEventListener:
 
         HubConnectionBuilder = _import_hub_builder()
 
-        event_url = assemble_url(self._host, assemble_path(Services.EVENT, "signalr"))
+        event_url = assemble_url(self._host, assemble_path(Service.EVENT, "signalr"))
 
         verify_ssl = self._verify if isinstance(self._verify, bool) else True
         options: dict[str, Any] = {"verify_ssl": verify_ssl}
@@ -385,7 +385,7 @@ class PersistentSafeguardEventListener:
                 conn.connect_password(username, password, provider)
                 token = conn.UserToken
                 if token is None:
-                    raise SafeguardException("Authentication succeeded but no token was returned")
+                    raise SafeguardError("Authentication succeeded but no token was returned")
                 return token
 
         return cls(host, token_factory, verify, **kwargs)
@@ -416,7 +416,7 @@ class PersistentSafeguardEventListener:
                 conn.connect_certificate(cert_file, key_file, provider)
                 token = conn.UserToken
                 if token is None:
-                    raise SafeguardException("Authentication succeeded but no token was returned")
+                    raise SafeguardError("Authentication succeeded but no token was returned")
                 return token
 
         return cls(host, token_factory, verify, **kwargs)
