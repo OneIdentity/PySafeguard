@@ -344,8 +344,8 @@ class AsyncSafeguardClient:
         """
         resp = await self.stream(HttpMethod.GET, service, endpoint, params=params, headers=headers, host=host, cert=cert, api_version=api_version)
         if resp.status != 200:
-            await resp.read()
-            raise ApiError.from_async_response(resp, await resp.text())
+            body = await resp.text()
+            raise ApiError.from_async_response(resp, body)
 
         written = 0
         f = await asyncio.to_thread(open, file_path, "wb")
