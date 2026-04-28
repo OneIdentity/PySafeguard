@@ -3,8 +3,9 @@
 Python SDK for the One Identity Safeguard Web API. Published as a package on
 [PyPI](https://pypi.org/project/pysafeguard/).
 
-Requires Python ≥ 3.10. Dependencies: requests, truststore. Optional extras:
-`async` (aiohttp), `signalr` (signalrcore).
+Requires Python ≥ 3.10. Dependencies: requests, truststore (and
+typing\_extensions on Python < 3.11). Optional extras: `async` (aiohttp),
+`signalr` (signalrcore).
 
 The .NET counterpart of this SDK is
 [SafeguardDotNet](https://github.com/OneIdentity/SafeguardDotNet). Refer to
@@ -16,7 +17,7 @@ and authentication flows.
 ```
 PySafeguard/
 |-- src/pysafeguard/                # SDK package
-|   |-- __init__.py                 # Public API with __all__
+|   |-- __init__.py                 # Public API with __all__ and async lazy imports
 |   |-- client.py                   # SafeguardClient (sync, requests-based)
 |   |-- async_client.py             # AsyncSafeguardClient (async, aiohttp-based)
 |   |-- auth.py                     # Auth protocol + PasswordAuth, CertificateAuth, PkceAuth, TokenAuth
@@ -32,6 +33,7 @@ PySafeguard/
 |   `-- py.typed                    # PEP 561 marker for typed package
 |
 |-- tests/                          # Unit and integration tests
+|   |-- conftest.py                 # Shared fixtures, auto-skip integration when SPP_HOST unset
 |   |-- test_auth.py                # Auth strategy tests
 |   |-- test_client_new.py          # SafeguardClient init/lifecycle tests
 |   |-- test_client_request_logic.py # SafeguardClient request tests (mocked HTTP)
@@ -45,12 +47,47 @@ PySafeguard/
 |   |-- test_pkce_helpers.py        # PKCE flow tests
 |   |-- test_utility.py             # Utility function tests
 |   `-- integration/                # Live-appliance integration tests
+|       |-- conftest.py             # Preflight fixture: enables ROG via PKCE if disabled
+|       |-- test_auth_sync.py       # Sync auth flow tests (password, cert, PKCE)
+|       |-- test_auth_async.py      # Async auth flow tests
+|       |-- test_invoke_sync.py     # Sync API invocation tests
+|       |-- test_invoke_async.py    # Async API invocation tests
+|       |-- test_user_crud_sync.py  # Sync user CRUD operations
+|       |-- test_user_crud_async.py # Async user CRUD operations
+|       |-- test_token_sync.py      # Sync token lifecycle tests
+|       |-- test_token_async.py     # Async token lifecycle tests
+|       |-- test_client_features.py # Client feature tests (provider lookup, etc.)
+|       |-- test_streaming.py       # Stream/download/upload tests
+|       |-- test_a2a.py             # A2A credential retrieval tests
+|       |-- test_event_listener.py  # SignalR event listener tests
+|       |-- test_persistent_listener_factory.py # Persistent listener factory tests
+|       |-- test_certificate_auth.py # Certificate auth-specific tests
+|       |-- test_pkce_auth.py       # PKCE auth-specific tests
+|       |-- test_factories.py       # Factory method tests
+|       `-- test_anonymous.py       # Anonymous/unauthenticated access tests
 |
-|-- samples/                        # Example scripts
+|-- samples/                        # Example scripts (see Samples section below)
+|   |-- PasswordExample.py          # PasswordAuth with local provider
+|   |-- PasswordExternalExample.py  # PasswordAuth with external provider
+|   |-- CertificateExample.py       # CertificateAuth
+|   |-- CertificateExternalExample.py # CertificateAuth with external provider
+|   |-- PkceExample.py              # PkceAuth flow
+|   |-- AnonymousExample.py         # Unauthenticated access (Service.NOTIFICATION)
+|   |-- NewUserExample.py           # User creation via CORE API
+|   |-- SignalRExample.py           # One-shot SignalR event listener
+|   |-- PersistentSignalRExample.py # Auto-reconnecting event listener
+|   |-- A2APasswordExample.py       # A2A password retrieval
+|   |-- A2APrivateKeyExample.py     # A2A private key retrieval
+|   `-- A2AApiKeySecretExample.py   # A2A API key secret retrieval
+|
+|-- pipeline-templates/             # Azure Pipelines shared templates
+|   |-- build-steps.yml             # Build, lint, test, package steps
+|   `-- global-variables.yml        # Pipeline variable definitions
 |-- pyproject.toml                  # Project metadata, dependencies (Poetry build backend)
 |-- ruff.toml                       # Ruff linter/formatter configuration
 |-- mypy.ini                        # Mypy strict type checking configuration
 |-- azure-pipelines.yml             # CI/CD: build with Poetry, publish to PyPI on tag
+|-- versionnumber.ps1               # PowerShell script for CI version stamping
 `-- README.md                       # User-facing documentation and usage examples
 ```
 
@@ -97,12 +134,25 @@ python -m pytest tests/ -m "not integration"
 SPP_HOST=<host> SPP_USERNAME=<user> SPP_PASSWORD=<pass> python -m pytest tests/ -m integration
 ```
 
+The test suite uses `pytest-asyncio` with `asyncio_mode = "auto"` (configured
+in `pyproject.toml`), so async test functions run automatically without
+`@pytest.mark.asyncio`.
+
 ### Testing against a live appliance
 
 Integration tests interact with a real Safeguard appliance. **If making
 non-trivial changes to authentication, API calls, or event handling, ask the
 user for appliance access** and request: appliance address, admin username,
 admin password, and CA certificate path (or `False` to disable TLS verification).
+
+Environment variables for integration tests:
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `SPP_HOST` | **Yes** | — | Appliance hostname or IP. Tests auto-skip when unset. |
+| `SPP_USERNAME` | No | `Admin` | Safeguard user for authentication. |
+| `SPP_PASSWORD` | **Yes** | — | Password for the Safeguard user. |
+| `SPP_CA_FILE` | No | — | Path to CA certificate file. Omit to disable TLS verification. |
 
 ## Architecture
 
@@ -116,7 +166,9 @@ admin password, and CA certificate path (or `False` to disable TLS verification)
 ### Authentication strategies
 
 Auth objects are passed to the client constructor. Each implements the `Auth`
-protocol with `authenticate()`, `refresh()`, `can_refresh`, and async variants.
+protocol (`auth.py`) with `authenticate()`, `refresh()`, `can_refresh`, and
+async variants. The `Auth` protocol itself is exported in `__all__` and can be
+used for type annotations.
 
 | Strategy | Module | Description |
 |---|---|---|
@@ -152,10 +204,10 @@ with SafeguardClient("appliance.example.com",
 ### HTTP methods
 
 ```python
-client.get(service, endpoint, *, params=None, headers=None)
-client.post(service, endpoint, *, json=None, data=None, params=None, headers=None)
-client.put(service, endpoint, *, json=None, data=None, params=None, headers=None)
-client.delete(service, endpoint, *, params=None, headers=None)
+client.get(service, endpoint, *, params=None, headers=None, host=None, cert=None, api_version=None)
+client.post(service, endpoint, *, json=None, data=None, params=None, headers=None, host=None, cert=None, api_version=None)
+client.put(service, endpoint, *, json=None, data=None, params=None, headers=None, host=None, cert=None, api_version=None)
+client.delete(service, endpoint, *, params=None, headers=None, host=None, cert=None, api_version=None)
 client.request(method, service, endpoint, *, ...)  # Low-level escape hatch
 ```
 
@@ -163,6 +215,9 @@ client.request(method, service, endpoint, *, ...)  # Low-level escape hatch
 - `data=` for raw string bodies
 - `params=` for query parameters
 - `headers=` for additional headers (merged with defaults)
+- `host=` to override the target host (useful for clusters)
+- `cert=` for client certificate as `(cert_file, key_file)` tuple
+- `api_version=` to override the API version for a single request
 
 ### Streaming
 
@@ -205,6 +260,14 @@ All errors carry `status_code`, `error_code`, `error_message`, `response_body`.
 an API key header (`Authorization: A2A <apiKey>`) to retrieve credentials.
 Supports password, private key, and API key secret retrieval.
 
+For one-shot operations without a context manager, use the static convenience
+methods:
+
+```python
+password = A2AContext.quick_retrieve_password(host, api_key, cert_file, key_file)
+private_key = A2AContext.quick_retrieve_private_key(host, api_key, cert_file, key_file)
+```
+
 ### Event listeners
 
 - `SafeguardEventListener` — one-shot SignalR listener with token auth
@@ -212,6 +275,14 @@ Supports password, private key, and API key secret retrieval.
   re-authenticates on disconnect
 
 Created via `client.get_event_listener()` / `client.get_persistent_event_listener()`.
+
+Related public types (all exported from `__init__.py`):
+
+- `EventHandlerRegistry` — container for registered event handlers
+- `EventListenerState` — enum: `STARTING`, `CONNECTED`, `DISCONNECTED`,
+  `RECONNECTING`, `STOPPED`
+- `SafeguardEventHandler` — callback type alias: `(event_name, event_body) -> None`
+- `SafeguardStateCallback` — callback type alias: `(EventListenerState) -> None`
 
 ### PKCE non-interactive login
 
@@ -233,12 +304,24 @@ Supports context manager (`with HiddenString(...) as s:`) for scoped disposal,
 - `auto_refresh=True` on construction enables automatic refresh before each request
 - `client.logout()` POSTs to `Token/Logout` then clears the local token
 
+### Async lazy imports
+
+`AsyncSafeguardClient` and `AsyncA2AContext` are lazily imported via
+`__getattr__` in `__init__.py` so that `import pysafeguard` works without the
+`[async]` extra (aiohttp) installed. On first access, if aiohttp is missing, a
+helpful `ImportError` is raised directing the user to install
+`pysafeguard[async]`.
+
 ## Code conventions
 
 ### Type annotations
 
 All functions must have complete type annotations. The project uses `mypy` in
 strict mode. Use `typing.cast()` when narrowing types from JSON responses.
+
+`data_types.py` includes a `StrEnum` compatibility shim for Python 3.10 (before
+`enum.StrEnum` was added in 3.11). Similarly, `utility.py` conditionally imports
+`LiteralString` from `typing_extensions` on Python < 3.11.
 
 ### Naming conventions
 
@@ -264,15 +347,23 @@ public method should have a docstring.
 7. **Clean `__all__`** — typed, intentional public surface
 8. **Secret protection** — HiddenString/repr=False on all credential fields
 
+## Deprecations (v8.0)
+
+The following are deprecated and will be removed in a future version:
+
+- **Plural enum aliases** (`data_types.py`): `Services` → use `Service`,
+  `HttpMethods` → use `HttpMethod`, `A2ATypes` → use `A2AType`,
+  `SshKeyFormats` → use `SshKeyFormat`.
+- **`HiddenString.get_value()`** (`hidden_string.py`): Use the `.value`
+  property instead.
+
 ## Versioning and release
 
 The version is set in `pyproject.toml` (`version = "X.Y.Z"`). The CI pipeline
-(`azure-pipelines.yml`) overrides the version from the Git tag name when
-building from a tag:
-
-```yaml
-poetry version $(build.SourceBranchName)
-```
+(`azure-pipelines.yml`) delegates version stamping to
+`pipeline-templates/build-steps.yml`, which calls the PowerShell script
+`versionnumber.ps1`. This script computes the package version from the Git tag
+name and build ID.
 
 Releases are published to PyPI automatically when a Git tag is pushed. The
 pipeline uses `twine` to upload via the `pypiOneIdentity` service connection.
