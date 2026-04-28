@@ -133,7 +133,7 @@ async def _async_rsts_request(
         text = await resp.text()
         status = resp.status
 
-    if not (200 <= status < 300) and status != 203:
+    if not (200 <= status < 300):
         error_message = text.strip() if text.strip() else str(status)
         raise SafeguardError(
             f"rSTS authentication error: {error_message}",

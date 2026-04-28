@@ -14,6 +14,7 @@ Example::
 
 from __future__ import annotations
 
+import asyncio
 import json
 import ssl
 import typing
@@ -347,12 +348,13 @@ class AsyncSafeguardClient:
             raise ApiError.from_async_response(resp, await resp.text())
 
         written = 0
+        f = await asyncio.to_thread(open, file_path, "wb")
         try:
-            with open(file_path, "wb") as f:
-                async for chunk in resp.content.iter_chunked(chunk_size):
-                    f.write(chunk)
-                    written += len(chunk)
+            async for chunk in resp.content.iter_chunked(chunk_size):
+                await asyncio.to_thread(f.write, chunk)
+                written += len(chunk)
         finally:
+            await asyncio.to_thread(f.close)
             resp.release()
         return written
 

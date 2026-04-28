@@ -158,7 +158,7 @@ def _rsts_request(session: Session, url: str, form_data: dict[str, str]) -> Resp
     )
 
     status = resp.status_code
-    if not (200 <= status < 300) and status != 203:
+    if not (200 <= status < 300):
         error_message = resp.text.strip() if resp.text.strip() else str(status)
         raise SafeguardError(
             f"rSTS authentication error: {error_message}",
