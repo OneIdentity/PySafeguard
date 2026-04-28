@@ -1,6 +1,8 @@
 # mypy: ignore-errors
 # type: ignore
 
+import warnings
+
 from .async_connection import AsyncConnection as AsyncConnection
 from .async_pkce import async_connect_pkce as async_connect_pkce
 from .async_pkce import async_get_pkce_token as async_get_pkce_token
@@ -10,6 +12,12 @@ from .data_types import A2ATypes as A2ATypes
 from .data_types import HttpMethods as HttpMethods
 from .data_types import Services
 from .data_types import SshKeyFormats as SshKeyFormats
+from .event import EventHandlerRegistry as EventHandlerRegistry
+from .event import EventListenerState as EventListenerState
+from .event import PersistentSafeguardEventListener as PersistentSafeguardEventListener
+from .event import SafeguardEventHandler as SafeguardEventHandler
+from .event import SafeguardEventListener as SafeguardEventListener
+from .event import SafeguardStateCallback as SafeguardStateCallback
 from .exceptions import SafeguardException as SafeguardException
 from .hidden_string import HiddenString as HiddenString
 from .pkce import connect_pkce as connect_pkce
@@ -44,23 +52,36 @@ class PySafeguardConnection(Connection):
     def register_signalr_username(conn, callback, username, password):
         """Wrapper to register a SignalR callback using username/password authentication.
 
+        .. deprecated::
+            Use :class:`~pysafeguard.event.SafeguardEventListener` or
+            :meth:`Connection.get_event_listener` instead.
+
         Arguments:
         conn -- PySafeguardConnection instance object
         callback -- Callback function to handle messages that come back
         username -- Username for authentication
         password -- Password for authentication
         """
+        warnings.warn(
+            "register_signalr_username is deprecated. Use SafeguardEventListener or Connection.get_event_listener() instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
         def _token_factory_username():
             conn.connect_password(username, password)
             return conn.UserToken
 
         options = {"access_token_factory": _token_factory_username}
-        PySafeguardConnection.__register_signalr(conn.host, callback, options, bool(conn.req_globals.get("verify", True)))
+        PySafeguardConnection.__register_signalr(conn.host, callback, options, bool(conn.verify))
 
     @staticmethod
     def register_signalr_certificate(conn, callback, certfile, keyfile):
         """Wrapper to register a SignalR callback using certificate authentication.
+
+        .. deprecated::
+            Use :class:`~pysafeguard.event.SafeguardEventListener` or
+            :meth:`Connection.get_event_listener` instead.
 
         Arguments:
         conn -- PySafeguardConnection instance object
@@ -68,13 +89,18 @@ class PySafeguardConnection(Connection):
         certfile -- Path to the user certificate in pem format.
         keyfile -- Path to the user certificate's key in key format.
         """
+        warnings.warn(
+            "register_signalr_certificate is deprecated. Use SafeguardEventListener or Connection.get_event_listener() instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
         def _token_factory_certificate():
             conn.connect_certificate(certfile, keyfile, provider="certificate")
             return conn.UserToken
 
         options = options = {"access_token_factory": _token_factory_certificate}
-        PySafeguardConnection.__register_signalr(conn.host, callback, options, bool(conn.req_globals.get("verify", True)))
+        PySafeguardConnection.__register_signalr(conn.host, callback, options, bool(conn.verify))
 
 
 # ---------------------------------------------------------------------------

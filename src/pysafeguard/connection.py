@@ -3,6 +3,7 @@ import typing
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import TracebackType
+from typing import TYPE_CHECKING
 
 from requests import Response, Session
 from requests.structures import CaseInsensitiveDict
@@ -11,6 +12,9 @@ from .data_types import A2ATypes, HttpMethods, Services, SshKeyFormats
 from .exceptions import SafeguardException
 from .hidden_string import HiddenString
 from .utility import JsonType, LiteralString, assemble_path, assemble_url, get_access_token, get_user_token
+
+if TYPE_CHECKING:
+    from .event import PersistentSafeguardEventListener, SafeguardEventListener
 
 DEFAULT_TIMEOUT = 300
 
@@ -355,6 +359,56 @@ class Connection:
         except Exception:
             pass  # Best-effort, matching SafeguardDotNet behavior
         self._set_user_token(None)
+
+    def get_event_listener(self) -> "SafeguardEventListener":
+        """Create a :class:`~pysafeguard.event.SafeguardEventListener` using
+        this connection's current token.
+
+        :returns: A new :class:`SafeguardEventListener` ready to have handlers
+            registered and :meth:`~SafeguardEventListener.start` called.
+        :raises SafeguardException: If the connection has no user token.
+        """
+        from . import event
+
+        if not self.UserToken:
+            raise SafeguardException("Connection has no user token. Authenticate before creating an event listener.")
+        return event.SafeguardEventListener(self.host or "", self.UserToken, self.verify)
+
+    def get_persistent_event_listener(self) -> "PersistentSafeguardEventListener":
+        """Create a :class:`~pysafeguard.event.PersistentSafeguardEventListener`
+        that re-authenticates using the stored credentials on disconnect.
+
+        :returns: A new :class:`PersistentSafeguardEventListener`.
+        :raises SafeguardException: If the connection has no stored credentials
+            capable of re-authentication.
+        """
+        from . import event
+
+        cred = self._auth_credential
+        if cred is None:
+            raise SafeguardException("No stored credentials available for persistent event listener. Use a password or certificate connection.")
+        host = self.host or ""
+        verify = self.verify
+
+        if isinstance(cred, _PasswordCredential):
+            return event.PersistentSafeguardEventListener.from_password(host, cred.username, cred.password.get_value(), cred.provider, verify)
+        elif isinstance(cred, _CertificateCredential):
+            return event.PersistentSafeguardEventListener.from_certificate(host, cred.cert_file, cred.key_file, cred.provider, verify)
+        elif isinstance(cred, _PkceCredential):
+            if cred.secondary_password is not None:
+                raise SafeguardException("Cannot create persistent event listener for PKCE connection with MFA.")
+            from .pkce import get_pkce_token
+
+            pkce_provider = cred.provider
+            pkce_username = cred.username
+            pkce_password = cred.password.get_value()
+
+            def _pkce_token_factory() -> str:
+                return get_pkce_token(host, pkce_provider, pkce_username, pkce_password, verify=verify)
+
+            return event.PersistentSafeguardEventListener(host, _pkce_token_factory, verify)
+        else:
+            raise SafeguardException("Unsupported credential type for persistent event listener.")
 
     def get_remaining_token_lifetime(self) -> int | None:
         """
