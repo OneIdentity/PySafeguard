@@ -250,8 +250,15 @@ class SafeguardEventListener:
 
         event_url = assemble_url(self._host, assemble_path(Service.EVENT, "signalr"))
 
-        verify_ssl = self._verify if isinstance(self._verify, bool) else True
-        options: dict[str, Any] = {"verify_ssl": verify_ssl}
+        options: dict[str, Any] = {}
+        if isinstance(self._verify, bool):
+            options["verify_ssl"] = self._verify
+        else:
+            # CA bundle path — build an SSLContext so signalrcore uses it
+            import ssl
+
+            ssl_context = ssl.create_default_context(cafile=self._verify)
+            options["ssl_context"] = ssl_context
 
         if self._api_key:
             api_key = self._api_key
