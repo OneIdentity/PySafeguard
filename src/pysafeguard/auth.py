@@ -1,3 +1,6 @@
+# Copyright (c) One Identity LLC. All rights reserved.
+# Licensed under the Apache License, Version 2.0.
+
 """Authentication strategy objects for Safeguard.
 
 Each auth class encapsulates credentials and knows how to authenticate

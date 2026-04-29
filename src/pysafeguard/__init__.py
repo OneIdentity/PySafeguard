@@ -1,3 +1,6 @@
+# Copyright (c) One Identity LLC. All rights reserved.
+# Licensed under the Apache License, Version 2.0.
+
 """PySafeguard — Python SDK for One Identity Safeguard Web API."""
 
 from __future__ import annotations

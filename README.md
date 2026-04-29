@@ -1,3 +1,6 @@
+[![PyPI](https://img.shields.io/pypi/v/pysafeguard.svg)](https://pypi.org/project/pysafeguard/)
+[![GitHub](https://img.shields.io/github/license/OneIdentity/PySafeguard.svg)](https://github.com/OneIdentity/PySafeguard/blob/main/LICENSE)
+
 # PySafeguard
 One Identity Safeguard Python SDK
 

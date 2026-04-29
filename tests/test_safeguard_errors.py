@@ -1,3 +1,6 @@
+# Copyright (c) One Identity LLC. All rights reserved.
+# Licensed under the Apache License, Version 2.0.
+
 """Tests for the new v8.0 error hierarchy (pysafeguard.errors).
 
 Covers SafeguardError, ApiError, status-code mapping, from_response factory,

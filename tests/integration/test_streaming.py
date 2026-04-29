@@ -1,3 +1,6 @@
+# Copyright (c) One Identity LLC. All rights reserved.
+# Licensed under the Apache License, Version 2.0.
+
 """Integration tests for streaming download/upload against a live Safeguard appliance.
 
 Uses the Backups endpoint (``service/appliance/v4/Backups``) which supports

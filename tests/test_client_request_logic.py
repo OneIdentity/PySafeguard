@@ -1,3 +1,6 @@
+# Copyright (c) One Identity LLC. All rights reserved.
+# Licensed under the Apache License, Version 2.0.
+
 """Tests for SafeguardClient request logic using mocked HTTP responses.
 
 Tests URL construction, header merging, body handling, verb methods,

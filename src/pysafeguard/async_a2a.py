@@ -1,3 +1,6 @@
+# Copyright (c) One Identity LLC. All rights reserved.
+# Licensed under the Apache License, Version 2.0.
+
 """Async Application-to-Application (A2A) context for Safeguard.
 
 Mirrors :class:`~pysafeguard.a2a.A2AContext` for use with ``asyncio``.

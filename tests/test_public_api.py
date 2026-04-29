@@ -1,3 +1,6 @@
+# Copyright (c) One Identity LLC. All rights reserved.
+# Licensed under the Apache License, Version 2.0.
+
 """Tests verifying the public API surface of pysafeguard v8.0.
 
 Ensures all expected symbols are exported and deprecated symbols are gone.

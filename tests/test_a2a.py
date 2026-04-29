@@ -1,3 +1,6 @@
+# Copyright (c) One Identity LLC. All rights reserved.
+# Licensed under the Apache License, Version 2.0.
+
 """Tests for A2AContext and AsyncA2AContext construction and validation logic.
 
 These are pure-logic tests that do not require a live appliance or A2A

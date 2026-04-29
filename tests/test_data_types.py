@@ -1,3 +1,6 @@
+# Copyright (c) One Identity LLC. All rights reserved.
+# Licensed under the Apache License, Version 2.0.
+
 """Unit tests for pysafeguard.data_types — enum definitions and StrEnum behavior."""
 
 from pysafeguard.data_types import A2AType, A2ATypes, HttpMethod, HttpMethods, Service, Services, SshKeyFormat, SshKeyFormats

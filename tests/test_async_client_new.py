@@ -1,3 +1,6 @@
+# Copyright (c) One Identity LLC. All rights reserved.
+# Licensed under the Apache License, Version 2.0.
+
 """Tests for AsyncSafeguardClient request logic using mocked HTTP responses.
 
 Tests URL construction, auth flow, and verb methods using the new v8.0

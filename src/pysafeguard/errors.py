@@ -1,3 +1,6 @@
+# Copyright (c) One Identity LLC. All rights reserved.
+# Licensed under the Apache License, Version 2.0.
+
 """Exception hierarchy for PySafeguard.
 
 All exceptions inherit from :class:`SafeguardError` so callers can catch

@@ -1,3 +1,6 @@
+# Copyright (c) One Identity LLC. All rights reserved.
+# Licensed under the Apache License, Version 2.0.
+
 """Integration tests for A2A (Application-to-Application) credential operations.
 
 These tests create a full A2A environment on the appliance:

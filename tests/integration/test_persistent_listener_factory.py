@@ -1,3 +1,6 @@
+# Copyright (c) One Identity LLC. All rights reserved.
+# Licensed under the Apache License, Version 2.0.
+
 """Integration tests: PersistentSafeguardEventListener.from_password live token factory.
 
 Verifies the refactored from_password/from_certificate factory methods

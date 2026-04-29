@@ -1,3 +1,6 @@
+# Copyright (c) One Identity LLC. All rights reserved.
+# Licensed under the Apache License, Version 2.0.
+
 """Async PKCE non-interactive login for Safeguard.
 
 Async mirror of :mod:`pysafeguard.pkce`. Programmatically drives the
