@@ -1,3 +1,6 @@
+# Copyright (c) One Identity LLC. All rights reserved.
+# Licensed under the Apache License, Version 2.0.
+
 """Integration tests: PKCE authentication (sync + async).
 
 PKCE is the recommended auth method for newer appliances where

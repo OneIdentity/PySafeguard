@@ -1,3 +1,6 @@
+# Copyright (c) One Identity LLC. All rights reserved.
+# Licensed under the Apache License, Version 2.0.
+
 """Application-to-Application (A2A) context for Safeguard credential operations.
 
 The :class:`A2AContext` provides a reusable wrapper around the Safeguard A2A

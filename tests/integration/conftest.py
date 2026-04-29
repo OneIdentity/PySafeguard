@@ -1,3 +1,6 @@
+# Copyright (c) One Identity LLC. All rights reserved.
+# Licensed under the Apache License, Version 2.0.
+
 """Integration test fixtures — shared authenticated connections for live-appliance tests."""
 
 from __future__ import annotations

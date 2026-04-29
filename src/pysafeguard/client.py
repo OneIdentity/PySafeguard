@@ -1,3 +1,6 @@
+# Copyright (c) One Identity LLC. All rights reserved.
+# Licensed under the Apache License, Version 2.0.
+
 """Synchronous Safeguard API client.
 
 The primary entry point for interacting with a One Identity Safeguard

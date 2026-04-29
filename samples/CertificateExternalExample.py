@@ -1,3 +1,6 @@
+# Copyright (c) One Identity LLC. All rights reserved.
+# Licensed under the Apache License, Version 2.0.
+
 import json
 
 from pysafeguard import SafeguardClient, CertificateAuth, Service

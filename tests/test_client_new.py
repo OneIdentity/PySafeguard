@@ -1,3 +1,6 @@
+# Copyright (c) One Identity LLC. All rights reserved.
+# Licensed under the Apache License, Version 2.0.
+
 """Tests for SafeguardClient construction and properties.
 
 Covers init defaults, repr, is_authenticated, context manager behavior,

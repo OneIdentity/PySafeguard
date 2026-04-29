@@ -1,3 +1,6 @@
+# Copyright (c) One Identity LLC. All rights reserved.
+# Licensed under the Apache License, Version 2.0.
+
 """PKCE non-interactive login for Safeguard.
 
 Programmatically drives the browser-based OAuth2/PKCE flow by directly

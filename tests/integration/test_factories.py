@@ -1,3 +1,6 @@
+# Copyright (c) One Identity LLC. All rights reserved.
+# Licensed under the Apache License, Version 2.0.
+
 """Verify that removed v7.x factory functions are no longer importable.
 
 In v8.0, the module-level factory functions (connect_password, connect_certificate,

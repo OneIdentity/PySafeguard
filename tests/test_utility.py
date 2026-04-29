@@ -1,3 +1,6 @@
+# Copyright (c) One Identity LLC. All rights reserved.
+# Licensed under the Apache License, Version 2.0.
+
 """Unit tests for pysafeguard.utility — pure helper functions."""
 
 import pytest
