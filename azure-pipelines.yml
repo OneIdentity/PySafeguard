@@ -61,7 +61,7 @@ jobs:
       target: '$(Build.SourceVersion)'
       tagSource: 'userSpecifiedTag'
       tag: '$(ReleaseTag)'
-      title: '$(PackageVersion)'
+      title: '$(ReleaseTag)'
       releaseNotesSource: 'inline'
       releaseNotesInline: ''
       isPreRelease: ${{ not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')) }}
