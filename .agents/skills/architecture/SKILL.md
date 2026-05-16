@@ -207,6 +207,20 @@ listener.start()
 - Previous client is logged out best-effort on each reconnection
 - `stop()` stops inner listener, joins reconnect thread, emits `STOPPED`
 
+### Client Factory Methods
+
+`SafeguardClient` provides convenience methods to create event listeners
+from an authenticated client:
+
+```python
+listener = client.get_event_listener()              # SafeguardEventListener
+persistent = client.get_persistent_event_listener()  # PersistentSafeguardEventListener
+```
+
+**Note:** `AsyncSafeguardClient` does **not** have event listener factory
+methods. Create listeners directly using the sync client or construct them
+manually.
+
 ### signalrcore Protocol Version Bug
 
 signalrcore 1.0.2 incorrectly uses `negotiateVersion` (the negotiate

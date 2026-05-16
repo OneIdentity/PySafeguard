@@ -35,17 +35,20 @@ PySafeguard/
 ## Setup and build
 
 ```bash
-pip install poetry                # Install Poetry (if needed)
-poetry install --all-extras       # Install all deps including dev and optional
-poetry build                      # Build sdist + wheel
+pip install poetry                   # Install Poetry (if needed)
+poetry install --all-extras          # Install all deps including dev and optional
+poetry build                         # Build sdist + wheel
 ```
+
+All `poetry run` prefixed commands below assume deps are installed via
+`poetry install --all-extras`.
 
 ## Linting and type checking
 
 ```bash
-ruff check src/                   # Lint (line length: 160)
-ruff format --check src/          # Format check
-mypy src/                         # Type check (strict mode)
+poetry run ruff check src/                   # Lint (line length: 160)
+poetry run ruff format --check src/          # Format check
+poetry run mypy src/                         # Type check (strict mode)
 ```
 
 All code must pass `mypy --strict` without errors. Ruff enforces 160-char lines.
@@ -53,8 +56,8 @@ All code must pass `mypy --strict` without errors. Ruff enforces 160-char lines.
 ## Testing
 
 ```bash
-python -m pytest tests/ -m "not integration"    # Unit tests (no appliance)
-python -m pytest tests/ -m integration           # Integration tests (live appliance)
+poetry run python -m pytest tests/ -m "not integration"    # Unit tests
+poetry run python -m pytest tests/ -m integration           # Integration (live appliance)
 ```
 
 Uses `pytest-asyncio` with `asyncio_mode = "auto"` — async tests run without

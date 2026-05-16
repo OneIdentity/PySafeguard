@@ -309,6 +309,31 @@ A2A requests use `Authorization: A2A <apiKey>` (not Bearer).
 the raw API yourself, you **must** use `Content-Type: application/json`.
 Using `data=` (raw string) results in **415 Unsupported Media Type**.
 
+## TLS / Certificate Verification
+
+The `verify` parameter on `SafeguardClient` and `A2AContext` accepts:
+
+- `True` (default) — use system trust store
+- `False` — disable TLS verification (development only)
+- `str` — path to a CA bundle file for custom trust
+
+```python
+# CA bundle (recommended for production)
+client = SafeguardClient("host", auth=auth, verify="/path/to/ca-bundle.pem")
+
+# Disable verification (development only)
+client = SafeguardClient("host", auth=auth, verify=False)
+```
+
+### Environment Variables for Trust
+
+| Variable | Affects | Description |
+|----------|---------|-------------|
+| `REQUESTS_CA_BUNDLE` | All HTTP requests | CA bundle path for `requests` library |
+| `WEBSOCKET_CLIENT_CA_BUNDLE` | SignalR event listeners | CA bundle path for WebSocket connections |
+
+Set these when the appliance uses a certificate signed by an internal CA.
+
 ## Common Patterns
 
 ### GET with query parameters

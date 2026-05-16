@@ -13,16 +13,16 @@ description: >-
 
 ```bash
 # Unit tests (no live appliance required)
-python -m pytest tests/ -m "not integration"
+poetry run python -m pytest tests/ -m "not integration"
 
 # Integration tests (requires live appliance)
-SPP_HOST=<host> SPP_USERNAME=<user> SPP_PASSWORD=<pass> python -m pytest tests/ -m integration
+SPP_HOST=<host> SPP_USERNAME=<user> SPP_PASSWORD=<pass> poetry run python -m pytest tests/ -m integration
 
 # Single test file
-python -m pytest tests/test_auth.py -v
+poetry run python -m pytest tests/test_auth.py -v
 
 # Single test by name
-python -m pytest tests/ -k "test_password_auth_defaults" -v
+poetry run python -m pytest tests/ -k "test_password_auth_defaults" -v
 ```
 
 ## pytest Configuration
@@ -189,6 +189,19 @@ A2A tests (`tests/integration/test_a2a.py`) require extensive appliance setup:
 The test's session-scoped `a2a_env` fixture handles all of this automatically
 (including `openssl` cert generation in a temp directory). Cleanup deletes the
 trusted cert by thumbprint.
+
+### TLS Trust for Integration Tests
+
+If the appliance uses a certificate signed by an internal CA, set these
+environment variables in addition to the standard test variables:
+
+| Variable | Affects | Description |
+|----------|---------|-------------|
+| `REQUESTS_CA_BUNDLE` | All HTTP requests | CA bundle path for `requests` |
+| `WEBSOCKET_CLIENT_CA_BUNDLE` | SignalR event listeners | CA bundle path for WebSocket |
+
+Alternatively, pass the CA path via `SPP_CA_FILE` — the test fixtures pass it
+as `verify=<path>` to client constructors.
 
 ### A2A `set_password` Content-Type
 
