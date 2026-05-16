@@ -18,8 +18,14 @@ Write-Host "TagName = $TagName"
 Write-Host "IsTagBuild = $($local:IsTagBuildBool)"
 
 if ($local:IsTagBuildBool) {
-    # Tag builds use the tag name as the version (e.g. tag "8.0.0" -> version "8.0.0")
-    $local:PackageVersion = $TagName
+    # Validate tag format: must be v<major>.<minor>.<patch> with optional pre-release suffix
+    if ($TagName -notmatch '^v\d+\.\d+\.\d+') {
+        Write-Error "Tag '$TagName' does not match expected format 'v<major>.<minor>.<patch>'. Aborting release build."
+        exit 1
+    }
+    # Tag builds use the tag name as the version, stripping the 'v' prefix
+    # e.g. tag "v8.1.0" -> version "8.1.0"
+    $local:PackageVersion = $TagName -replace '^v', ''
     Write-Host "Tag build detected, using tag name as version"
 }
 else {
@@ -33,4 +39,14 @@ Write-Host "PackageVersion = $($local:PackageVersion)"
 
 poetry version $local:PackageVersion
 
+# Compute release tag: tag builds reuse the trigger tag; dev builds use non-triggering prefix
+if ($local:IsTagBuildBool) {
+    $local:ReleaseTag = $TagName
+} else {
+    $local:ReleaseTag = "dev/v${local:PackageVersion}"
+}
+
+Write-Host "ReleaseTag = $($local:ReleaseTag)"
+
 Write-Output "##vso[task.setvariable variable=PackageVersion;]$($local:PackageVersion)"
+Write-Output "##vso[task.setvariable variable=ReleaseTag;]$($local:ReleaseTag)"

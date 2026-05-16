@@ -8,11 +8,13 @@ trigger:
     - release-*
   tags:
     include:
-    - '*'
+    - 'v*'
   paths:
     exclude:
-    - README.md
-    - AGENTS.md
+    - '**/*.md'
+    - LICENSE
+    - docs/
+    - .github/CODEOWNERS
 
 pr:
   branches:
@@ -21,8 +23,10 @@ pr:
     - release-*
   paths:
     exclude:
-    - README.md
-    - AGENTS.md
+    - '**/*.md'
+    - LICENSE
+    - docs/
+    - .github/CODEOWNERS
 
 jobs:
 # Job 1: PR Validation - runs only on pull requests
@@ -56,7 +60,7 @@ jobs:
       action: 'create'
       target: '$(Build.SourceVersion)'
       tagSource: 'userSpecifiedTag'
-      tag: '$(PackageVersion)'
+      tag: '$(ReleaseTag)'
       title: '$(PackageVersion)'
       releaseNotesSource: 'inline'
       releaseNotesInline: ''
