@@ -1,162 +1,104 @@
 # AGENTS.md -- PySafeguard
 
 Python SDK for the One Identity Safeguard Web API. Published on
-[PyPI](https://pypi.org/project/pysafeguard/). Requires Python ≥ 3.10.
+[PyPI](https://pypi.org/project/pysafeguard/). Requires Python >= 3.10.
 
-Dependencies: `requests`, `truststore` (and `typing_extensions` on Python
-< 3.11). Optional extras: `async` (aiohttp), `signalr` (signalrcore).
+Core deps: `requests`, `truststore`, and `typing_extensions` on Python < 3.11.
+Optional extras: `async` (aiohttp) and `signalr` (signalrcore).
 
 ## Project structure
 
 ```
 PySafeguard/
-|-- src/pysafeguard/           # SDK package
-|   |-- __init__.py            # Public API (__all__) and async lazy imports
-|   |-- client.py              # SafeguardClient (sync, requests-based)
-|   |-- async_client.py        # AsyncSafeguardClient (async, aiohttp-based)
-|   |-- auth.py                # Auth protocol + PasswordAuth, CertificateAuth, PkceAuth, TokenAuth
-|   |-- errors.py              # SafeguardError hierarchy
-|   |-- data_types.py          # Enums: Service, HttpMethod, A2AType, SshKeyFormat
-|   |-- event.py               # SafeguardEventListener, PersistentSafeguardEventListener
-|   |-- a2a.py / async_a2a.py  # A2AContext / AsyncA2AContext
-|   |-- hidden_string.py       # HiddenString (sensitive value wrapper)
-|   |-- pkce.py / async_pkce.py # PKCE non-interactive login (internal)
-|   `-- utility.py             # URL assembly, token extraction helpers
-|-- tests/                     # Unit tests (mocked HTTP, no appliance needed)
-|   `-- integration/           # Live-appliance integration tests
-|-- samples/                   # Example scripts for each auth strategy and feature
-|-- pipeline-templates/        # Azure Pipelines shared templates
-|-- pyproject.toml             # Poetry build backend, dependencies, pytest config
-|-- ruff.toml                  # Ruff linter/formatter (line length: 160)
-|-- mypy.ini                   # Mypy strict type checking
-`-- azure-pipelines.yml        # CI/CD: build, lint, test, publish to PyPI on tag
+|-- src/pysafeguard/    # SDK package: clients, auth, errors, A2A, events, HiddenString
+|-- tests/              # Unit tests
+|   `-- integration/    # Live-appliance integration tests
+|-- samples/            # Auth, A2A, and SignalR examples
+|-- pipeline-templates/ # Shared Azure Pipelines templates
+|-- pyproject.toml      # Poetry metadata and pytest config
+|-- ruff.toml           # Ruff config
+|-- mypy.ini            # Mypy config
+`-- azure-pipelines.yml # CI/CD entrypoint
 ```
 
 ## Setup and build
 
 ```bash
-pip install poetry                   # Install Poetry (if needed)
-poetry install --all-extras          # Install all deps including dev and optional
-poetry build                         # Build sdist + wheel
+pip install poetry
+poetry install --all-extras
+poetry build
 ```
 
-All `poetry run` prefixed commands below assume deps are installed via
-`poetry install --all-extras`.
-
-## Linting and type checking
+## Linting
 
 ```bash
-poetry run ruff check src/                   # Lint (line length: 160)
-poetry run ruff format --check src/          # Format check
-poetry run mypy src/                         # Type check (strict mode)
+poetry run ruff check src/
+poetry run ruff format --check src/
+poetry run mypy src/
 ```
 
-All code must pass `mypy --strict` without errors. Ruff enforces 160-char lines.
+All code must pass `mypy --strict`. Ruff enforces 160-character lines.
 
 ## Testing
 
 ```bash
-poetry run python -m pytest tests/ -m "not integration"    # Unit tests
-poetry run python -m pytest tests/ -m integration           # Integration (live appliance)
+poetry run python -m pytest tests/ -m "not integration"
+poetry run python -m pytest tests/ -m integration
 ```
 
-Uses `pytest-asyncio` with `asyncio_mode = "auto"` — async tests run without
-`@pytest.mark.asyncio`. Integration tests auto-skip when `SPP_HOST` is unset.
-
-**For non-trivial auth/API/event changes, ask the user for appliance access.**
-See the `testing-guide` skill for environment variables, fixtures, and patterns.
-
-## Architecture
-
-| Class | Module | Description |
-|---|---|---|
-| `SafeguardClient` | `client.py` | Primary sync client (`requests`) |
-| `AsyncSafeguardClient` | `async_client.py` | Async mirror (`aiohttp`) |
-
-### Auth strategies
-
-Auth objects implement the `Auth` protocol (`auth.py`) and are passed to the
-client constructor. Secret fields are auto-wrapped in `HiddenString`.
-
-| Strategy | Description |
-|---|---|
-| `PasswordAuth` | Username/password (Resource Owner Grant) |
-| `CertificateAuth` | Client certificate authentication |
-| `PkceAuth` | PKCE non-interactive flow (recommended for newer appliances) |
-| `TokenAuth` | Pre-existing bearer token (no refresh) |
-
-### Usage pattern
-
-```python
-from pysafeguard import SafeguardClient, PasswordAuth, Service
-
-with SafeguardClient("appliance.example.com",
-                     auth=PasswordAuth("local", "admin", "secret"),
-                     verify=False) as client:
-    users = client.get(Service.CORE, "Users").json()
-    client.post(Service.CORE, "Users", json={"Name": "NewUser"})
-```
-
-### API services
-
-| Enum | URL path | Description |
-|---|---|---|
-| `Service.CORE` | `service/core` | Users, assets, policies, access requests |
-| `Service.APPLIANCE` | `service/appliance` | Appliance management |
-| `Service.NOTIFICATION` | `service/notification` | Anonymous status endpoints |
-| `Service.A2A` | `service/a2a` | Application-to-Application credentials |
-| `Service.EVENT` | `service/event` | SignalR event streaming |
-| `Service.RSTS` | `RSTS` | Embedded secure token service |
-
-Default API version: **v4**.
-
-### Error hierarchy
-
-```
-SafeguardError
-├── ApiError          (HTTP errors; auto-mapped by status code)
-│   ├── AuthenticationError (401)
-│   ├── AuthorizationError  (403)
-│   └── NotFoundError       (404)
-└── TransportError    (network/connection failures)
-```
+`pytest-asyncio` uses `asyncio_mode = "auto"`. Integration tests auto-skip when
+`SPP_HOST` is unset. For non-trivial auth, API, A2A, or event changes, ask for
+appliance access. See the `testing-guide` skill for fixtures and env vars.
 
 ## Code conventions
 
-- **Type annotations:** Complete on all functions. `mypy --strict` enforced.
-  Use `typing.cast()` for JSON narrowing. `StrEnum` shim in `data_types.py`
-  for Python 3.10; `LiteralString` from `typing_extensions` on < 3.11.
-- **Naming:** Classes PascalCase, methods/attrs snake_case, enums
-  UPPER_CASE values, private attrs `_prefixed`.
-- **Docstrings:** reStructuredText style (`:param name:`, `:returns:`).
-- **Design principles:**
-  1. Side-effect-free constructors — no network I/O in `__init__`
-  2. Auth as strategy objects — not factory functions
-  3. Keyword-only args — after the first 1-2 positional params
-  4. No mutable defaults — use `None` everywhere
-  5. Explicit `json`/`data` split — no magic body inference
-  6. Clean `__all__` — typed, intentional public surface
-  7. Secret protection — `HiddenString` on all credential fields
+- Keep type annotations complete and `mypy --strict` clean.
+- Use PascalCase for classes and snake_case for methods and attributes.
+- Use reStructuredText docstrings.
+- Keep constructors side-effect free.
+- Use auth strategy objects, keyword-only args after the first positional
+  parameters, no mutable defaults, explicit `json` / `data`, intentional
+  `__all__`, and `HiddenString` for secrets.
 
-## Deprecations (v8.0)
+## CI/CD
 
-- **Plural enum aliases:** `Services` → `Service`, `HttpMethods` → `HttpMethod`,
-  `A2ATypes` → `A2AType`, `SshKeyFormats` → `SshKeyFormat`.
-- **`HiddenString.get_value()`** → Use `.value` property instead.
+See the `build-and-release` skill for pipeline details, version derivation,
+and publishing workflow.
 
-## Versioning and release
+## Security
 
-Version is in `pyproject.toml` but **do not edit manually** — CI stamps from
-Git tag via `versionnumber.ps1`. Releases publish to PyPI automatically when a
-tag is pushed (`twine` via `pypiOneIdentity` service connection).
+- Never commit passwords, tokens, A2A API keys, private keys, generated test
+  certs, `.pypirc`, or service-connection output.
+- Wrap new secret-bearing fields in `HiddenString` immediately so `repr()` and
+  `str()` stay redacted.
+- Use `HiddenString.value` only where plaintext is required; avoid logging it
+  and treat `get_value()` as deprecated compatibility.
+- Prefer CA bundle verification over `verify=False`; use
+  `REQUESTS_CA_BUNDLE` / `WEBSOCKET_CLIENT_CA_BUNDLE` when needed.
+
+## Versioning
+
+`pyproject.toml` holds the base semantic version. CI stamps tagged releases and
+`.devN` prereleases via `versionnumber.ps1`; details live in the
+`build-and-release` skill.
 
 ## On-demand skills
 
-The following skills provide deeper reference material. Read the `SKILL.md`
-when your current task matches the trigger.
-
 | Skill | When to read | File |
 |-------|-------------|------|
-| Testing Guide | Running/writing tests, test failures, live appliance setup | `.agents/skills/testing-guide/SKILL.md` |
-| API Patterns | HTTP methods, streaming, errors, A2A, token lifecycle | `.agents/skills/api-patterns/SKILL.md` |
-| Architecture | Module internals, auth flow, events, PKCE, HiddenString | `.agents/skills/architecture/SKILL.md` |
+| Testing Guide | Tests, fixtures, live appliance setup | `.agents/skills/testing-guide/SKILL.md` |
+| API Patterns | HTTP methods, streaming, errors, token lifecycle | `.agents/skills/api-patterns/SKILL.md` |
+| Architecture | Module internals, PKCE, HiddenString, SignalR internals | `.agents/skills/architecture/SKILL.md` |
+| Build and Release | Azure Pipelines, tags, releases, PyPI publish | `.agents/skills/build-and-release/SKILL.md` |
+| A2A Workflow | Certificate registration, API keys, A2A retrieval, brokering, listeners | `.agents/skills/a2a-workflow/SKILL.md` |
+
+## Deprecations (v8.0)
+
+- `Services` -> `Service`, `HttpMethods` -> `HttpMethod`, `A2ATypes` -> `A2AType`, `SshKeyFormats` -> `SshKeyFormat`
+- `HiddenString.get_value()` -> use `.value`
+
+## Keeping this file current
+
+When a change affects setup, linting, testing, security, versioning, pipeline
+behavior, or skill routing, update this file and the relevant
+`.agents/skills/*/SKILL.md` in the same change.
