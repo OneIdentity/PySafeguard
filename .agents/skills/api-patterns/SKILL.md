@@ -299,6 +299,21 @@ private_key = A2AContext.quick_retrieve_private_key(
 | `broker_access_request(api_key, access_request)` | `str` | Submit an access request |
 | `get_retrievable_accounts(*, filter=None)` | `list[dict]` | List accounts (uses cert auth) |
 
+### HiddenString return values
+
+Methods that return secrets (like `A2AContext.retrieve_password()`) return a
+`HiddenString` object that displays as `***` when printed, formatted, or
+converted with `str()`. To access the raw value:
+
+```python
+password = ctx.retrieve_password(api_key)
+print(password)          # prints: ***
+print(password.value)    # prints the actual password string
+raw = password.value
+```
+
+This prevents accidental credential leakage in logs or REPL output.
+
 ### A2A Authorization Header
 
 A2A requests use `Authorization: A2A <apiKey>` (not Bearer).
@@ -336,14 +351,17 @@ Set these when the appliance uses a certificate signed by an internal CA.
 
 ## Common Patterns
 
-### GET with query parameters
+### Query parameters
+
+Use the `params` keyword argument (not `parameters`) to pass query string values:
 
 ```python
-users = client.get(
-    Service.CORE, "Users",
-    params={"filter": "UserName eq 'admin'", "fields": "Id,UserName"},
-).json()
+users = client.get(Service.CORE, "Users", params={"fields": "Id,Name", "filter": "Disabled eq false"})
+assets = client.get(Service.CORE, "Assets", params={"filter": "Name eq 'MyAsset'"})
 ```
+
+> **Note:** The keyword is `params` (matching the `requests` library convention),
+> not `parameters` (which is the .NET SDK's name for the same concept).
 
 ### POST with JSON body
 
