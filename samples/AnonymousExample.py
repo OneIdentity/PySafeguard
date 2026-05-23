@@ -9,6 +9,11 @@ from pysafeguard import SafeguardClient, Service
 host = ""
 
 print("Connecting anonymously")
+# WARNING: verify=False disables TLS certificate verification. This sample uses it
+# so it works out of the box against a dev appliance with a self-signed certificate.
+# In production, omit `verify=False` and either trust the appliance's CA via the
+# REQUESTS_CA_BUNDLE environment variable or pass `verify="/path/to/ca-bundle.pem"`.
+# See the "TLS Verification" section in README.md for details.
 client = SafeguardClient(host, verify=False)
 
 print("Getting status")
