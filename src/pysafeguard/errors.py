@@ -18,6 +18,30 @@ if TYPE_CHECKING:
     from requests import Response
 
 
+# D-013: cap how much of a response body we splice into an exception's human-facing
+# message. The full body remains available to callers via :attr:`SafeguardError.response_body`
+# for diagnostic use; this limit only bounds what lands in ``str(exc)`` (the form that
+# typically reaches logs, crash reporters, and SIEMs). Truncation — not field-level
+# redaction — is the chosen mitigation: it never wrongly masks legitimate Safeguard
+# payload fields like ``PasswordRulesPolicyId``, ``ApiKeyName``, or
+# ``RequirePasswordChange``.
+_MAX_BODY_IN_MESSAGE = 200
+
+
+def _truncate_for_message(body: str | None, limit: int = _MAX_BODY_IN_MESSAGE) -> str:
+    """Bound a response body for inclusion in a human-readable exception message.
+
+    Returns ``body`` unchanged if it is already at or under ``limit`` characters,
+    otherwise returns the first ``limit`` characters followed by a
+    ``... (truncated, N total chars)`` marker so the reader knows it was elided.
+    """
+    if body is None:
+        return ""
+    if len(body) <= limit:
+        return body
+    return f"{body[:limit]}... (truncated, {len(body)} total chars)"
+
+
 class SafeguardError(Exception):
     """Base exception for all PySafeguard errors.
 
@@ -81,9 +105,9 @@ class ApiError(SafeguardError):
     @classmethod
     def from_response(cls, resp: Response) -> ApiError:
         """Create an ApiError from a sync ``requests.Response``."""
-        message = f"{resp.status_code} {resp.reason}: {resp.request.method} {resp.url}\n{resp.text}"
-        status_code = resp.status_code
         body = resp.text
+        message = f"{resp.status_code} {resp.reason}: {resp.request.method} {resp.url}\n{_truncate_for_message(body)}"
+        status_code = resp.status_code
 
         subclass = _STATUS_MAP.get(status_code, cls)
         return subclass(message, status_code=status_code, response_body=body)
@@ -96,7 +120,7 @@ class ApiError(SafeguardError):
         :param body: The response body text (must be read by the caller
             with ``await resp.text()`` before calling this method).
         """
-        message = f"{resp.status} {resp.reason}: {resp.method} {resp.url}\n{body}"
+        message = f"{resp.status} {resp.reason}: {resp.method} {resp.url}\n{_truncate_for_message(body)}"
         status_code = resp.status
 
         subclass = _STATUS_MAP.get(status_code, cls)

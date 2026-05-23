@@ -18,7 +18,7 @@ from urllib.parse import parse_qs, urlparse
 
 from requests import Response, Session
 
-from .errors import SafeguardError
+from .errors import SafeguardError, _truncate_for_message
 
 DEFAULT_TIMEOUT = 300
 
@@ -93,7 +93,7 @@ def get_pkce_token(
         claims_resp = _rsts_request(session, pkce_base_url + _STEP_GENERATE_CLAIMS, form_data)
         if claims_resp.status_code != 200:
             raise SafeguardError(
-                f"Failed to generate claims: {claims_resp.text}",
+                f"Failed to generate claims: {_truncate_for_message(claims_resp.text)}",
                 status_code=claims_resp.status_code,
                 response_body=claims_resp.text,
             )
@@ -164,7 +164,7 @@ def _rsts_request(session: Session, url: str, form_data: dict[str, str]) -> Resp
     if not (200 <= status < 300):
         error_message = resp.text.strip() if resp.text.strip() else str(status)
         raise SafeguardError(
-            f"rSTS authentication error: {error_message}",
+            f"rSTS authentication error: {_truncate_for_message(error_message)}",
             status_code=status,
             response_body=resp.text,
         )
@@ -375,7 +375,7 @@ def _post_authorization_code(session: Session, appliance: str, code: str, code_v
 
     if not resp.ok:
         raise SafeguardError(
-            f"Failed to exchange authorization code: {resp.status_code} {resp.text}",
+            f"Failed to exchange authorization code: {resp.status_code} {_truncate_for_message(resp.text)}",
             status_code=resp.status_code,
             response_body=resp.text,
         )
@@ -400,7 +400,7 @@ def _post_login_response(session: Session, appliance: str, rsts_token: str, api_
 
     if not resp.ok:
         raise SafeguardError(
-            f"Failed to exchange RSTS token: {resp.status_code} {resp.text}",
+            f"Failed to exchange RSTS token: {resp.status_code} {_truncate_for_message(resp.text)}",
             status_code=resp.status_code,
             response_body=resp.text,
         )
