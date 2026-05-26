@@ -100,8 +100,23 @@ def test_truncation_helper_preserves_legitimate_field_names() -> None:
     field names that happen to contain 'password', 'apikey', etc. Those are real
     Safeguard payload fields and must round-trip unchanged when the body is short.
     """
-    legitimate = '{"PasswordRulesPolicyId": 5, "ApiKeyName": "svc", "RequirePasswordChange": true, "PasswordHistoryDepth": 10, "PrivateKeyFormat": "OpenSsh"}'
+    preserved_field_names = (
+        "PasswordRulesPolicyId",
+        "ApiKeyName",
+        "RequirePasswordChange",
+        "PasswordHistoryDepth",
+        "PrivateKeyFormat",
+        "Password",
+        "ApiKey",
+        "PrivateKey",
+    )
+    legitimate = (
+        '{"PasswordRulesPolicyId":1,"ApiKeyName":"a","RequirePasswordChange":true,'
+        '"PasswordHistoryDepth":1,"PrivateKeyFormat":"x","Password":"s",'
+        '"ApiKey":"k","PrivateKey":"-----BEGIN PRIVATE KEY-----..."}'
+    )
+    assert len(legitimate) <= _MAX_BODY_IN_MESSAGE
     err = ApiError.from_response(_make_response(status_code=400, text=legitimate))
     rendered = str(err)
-    for needle in ("PasswordRulesPolicyId", "ApiKeyName", "RequirePasswordChange", "PasswordHistoryDepth", "PrivateKeyFormat"):
+    for needle in preserved_field_names:
         assert needle in rendered, f"{needle} must pass through the message unchanged (D-013)"
