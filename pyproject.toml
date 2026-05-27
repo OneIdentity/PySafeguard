@@ -5,7 +5,7 @@ build-backend = "poetry.core.masonry.api"
 [project]
 name = "pysafeguard"
 description = "One Identity Safeguard Python Package"
-version = "8.0.2"
+version = "8.0.3"
 readme = { file = "README.md", content-type = "text/markdown" }
 keywords = ["safeguard", "oneidentity"]
 license = "Apache"
@@ -33,6 +33,11 @@ dependencies = [
     "requests >= 2.32",
     "truststore >= 0.10",
     "typing_extensions >= 4.15; python_version < '3.11'",
+    # Direct floor pins on transitive deps that have known CVEs at lower versions:
+    # urllib3 >= 2.0.8 fixes CVE-2026-44431 (DNS rebinding) and CVE-2026-44432 (proxy confusion).
+    # idna >= 3.7 fixes CVE-2026-45409 (ReDoS via crafted IDN inputs).
+    "urllib3 >= 2.0.8",
+    "idna >= 3.7",
 ]
 
 [project.optional-dependencies]

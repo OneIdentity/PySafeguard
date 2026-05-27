@@ -98,6 +98,29 @@ following methods to establish trust.
 > The WEBSOCKET_CLIENT_CA_BUNDLE environment variable is only necessary
 > when working with SignalR.
 
+## TLS Verification
+
+`SafeguardClient` accepts a `verify` argument that is forwarded to the underlying
+`requests` library. It controls how TLS certificate verification is performed:
+
+- `verify=True` (default) — verify the appliance certificate against the system
+  trust store. **Use this in production.**
+- `verify="/path/to/ca-bundle.pem"` — verify against an explicit CA bundle. Use
+  this in production when the appliance is signed by a private CA not present in
+  the system trust store. Equivalent to setting the `REQUESTS_CA_BUNDLE`
+  environment variable.
+- `verify=False` — disable certificate verification entirely. **Never use this
+  in production.** It exposes the connection to man-in-the-middle attacks and
+  silently accepts any certificate, including expired or attacker-controlled
+  ones.
+
+The samples under [`samples/`](samples/) use `verify=False` so they work out of
+the box against a dev/test appliance with a self-signed certificate. Each such
+sample carries an inline `WARNING` comment pointing back to this section. When
+adapting a sample for production, remove `verify=False` and configure trust via
+`REQUESTS_CA_BUNDLE` (and `WEBSOCKET_CLIENT_CA_BUNDLE` if you use SignalR) or
+pass an explicit CA bundle path to `verify`.
+
 ## Getting Started
 
 > **Note:** Recent versions of Safeguard have Resource Owner Grant (ROG)
