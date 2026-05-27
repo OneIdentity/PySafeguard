@@ -18,7 +18,6 @@ if TYPE_CHECKING:
     from requests import Response
 
 
-
 class SafeguardError(Exception):
     """Base exception for all PySafeguard errors.
 
