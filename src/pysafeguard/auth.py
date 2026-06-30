@@ -19,7 +19,8 @@ Example::
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from dataclasses import KW_ONLY, dataclass, field
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 import requests as _requests
@@ -32,6 +33,7 @@ from .utility import JsonType
 if TYPE_CHECKING:
     from .async_client import AsyncSafeguardClient
     from .client import SafeguardClient
+    from .data_types import DeviceCodeInfo
 
 
 # ---------------------------------------------------------------------------
@@ -402,3 +404,78 @@ class TokenAuth:
     def dispose(self) -> None:
         """Zero out the stored token."""
         self.token.dispose()
+
+
+@dataclass(frozen=True, eq=False)
+class DeviceCodeAuth:
+    """OAuth 2.0 Device Authorization Grant (RFC 8628) authentication.
+
+    A headless, browser-less interactive login. The SDK requests a device code
+    from the appliance and hands the verification URL and user code to the
+    required ``on_device_code`` callback. Displaying that information is the
+    caller's responsibility — the library never prints or opens a browser. The
+    SDK then polls until the user authenticates (on any device) or the code
+    expires.
+
+    Unlike the other strategies this flow stores no password, token, or device
+    code, so it holds no :class:`~pysafeguard.hidden_string.HiddenString` fields
+    and has no ``dispose()``. It is interactive and cannot silently re-authenticate,
+    so ``can_refresh`` is ``False`` and ``refresh`` raises like :class:`TokenAuth`.
+
+    Example::
+
+        def show(info):
+            print(f"Visit {info.verification_uri_complete} and enter {info.user_code}")
+
+        auth = DeviceCodeAuth(show)
+        client = SafeguardClient("appliance", auth=auth)
+
+    .. note::
+        For async clients ``on_device_code`` may be a coroutine function; its
+        awaitable result is awaited. Sync callbacks must be plain functions.
+    """
+
+    on_device_code: Callable[[DeviceCodeInfo], None]
+    _: KW_ONLY
+    scope: str | None = None
+    client_id: str = ""
+    polling_interval: int = 5
+    is_cancelled: Callable[[], bool] | None = None
+
+    @property
+    def can_refresh(self) -> bool:
+        return False
+
+    def authenticate(self, client: SafeguardClient) -> str:
+        from .device_code import get_device_code_token
+
+        return get_device_code_token(
+            client.host or "",
+            on_device_code=self.on_device_code,
+            scope=self.scope,
+            client_id=self.client_id,
+            polling_interval=self.polling_interval,
+            is_cancelled=self.is_cancelled,
+            verify=client.verify,
+            api_version=client.api_version,
+        )
+
+    def refresh(self, client: SafeguardClient) -> str:
+        raise SafeguardError("DeviceCodeAuth does not support refresh. Device code login is interactive; start a new login.")
+
+    async def async_authenticate(self, client: AsyncSafeguardClient) -> str:
+        from .async_device_code import async_get_device_code_token
+
+        return await async_get_device_code_token(
+            client.host or "",
+            on_device_code=self.on_device_code,
+            scope=self.scope,
+            client_id=self.client_id,
+            polling_interval=self.polling_interval,
+            is_cancelled=self.is_cancelled,
+            verify=client.verify,
+            api_version=client.api_version,
+        )
+
+    async def async_refresh(self, client: AsyncSafeguardClient) -> str:
+        raise SafeguardError("DeviceCodeAuth does not support refresh. Device code login is interactive; start a new login.")

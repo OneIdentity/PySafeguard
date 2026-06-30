@@ -13,6 +13,7 @@ from .client import SafeguardClient as SafeguardClient
 # Auth strategies
 from .auth import Auth as Auth
 from .auth import CertificateAuth as CertificateAuth
+from .auth import DeviceCodeAuth as DeviceCodeAuth
 from .auth import PasswordAuth as PasswordAuth
 from .auth import PkceAuth as PkceAuth
 from .auth import TokenAuth as TokenAuth
@@ -43,6 +44,7 @@ from .event import SafeguardEventListener as SafeguardEventListener
 from .event import SafeguardStateCallback as SafeguardStateCallback
 
 # Types
+from .data_types import DeviceCodeInfo as DeviceCodeInfo
 from .hidden_string import HiddenString as HiddenString
 
 if TYPE_CHECKING:
@@ -89,6 +91,7 @@ __all__ = [
     "CertificateAuth",
     "TokenAuth",
     "PkceAuth",
+    "DeviceCodeAuth",
     # Errors
     "SafeguardError",
     "ApiError",
@@ -113,4 +116,5 @@ __all__ = [
     "SafeguardStateCallback",
     # Types
     "HiddenString",
+    "DeviceCodeInfo",
 ]
