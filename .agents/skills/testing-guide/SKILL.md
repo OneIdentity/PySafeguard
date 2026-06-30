@@ -103,6 +103,7 @@ not set.
 | `SPP_USERNAME` | No | `Admin` | Safeguard user for authentication. |
 | `SPP_PASSWORD` | **Yes** | — | Password for the Safeguard user. |
 | `SPP_CA_FILE` | No | — | Path to CA certificate file. Omit to disable TLS verification. |
+| `SPP_DEVICE_CODE_INTERACTIVE` | No | — | Set to `1` to run the human-approval Device Code login test. Requires `SPP_HOST`; the test stays skipped otherwise. |
 
 ### Auto-skip Mechanism
 
