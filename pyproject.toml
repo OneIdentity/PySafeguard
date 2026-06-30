@@ -5,7 +5,7 @@ build-backend = "poetry.core.masonry.api"
 [project]
 name = "pysafeguard"
 description = "One Identity Safeguard Python Package"
-version = "8.0.4"
+version = "8.0.5"
 readme = { file = "README.md", content-type = "text/markdown" }
 keywords = ["safeguard", "oneidentity"]
 license = "Apache"
