@@ -46,6 +46,10 @@ async = [
     "aiohttp >= 3.14.1",
 ]
 signalr = [
+    # NOTE: signalrcore 1.0.2 (latest) hard-pins msgpack==1.1.2, which carries
+    # GHSA-6v7p-g79w-8964 (fixed in msgpack 1.2.1). msgpack cannot be upgraded
+    # until signalrcore relaxes this pin upstream; the exposure is limited to
+    # consumers who opt into this optional extra. Tracked as accepted risk.
     "signalrcore >= 0.9",
 ]
 dev = [
