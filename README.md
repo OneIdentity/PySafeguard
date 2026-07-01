@@ -219,6 +219,62 @@ with SafeguardClient("safeguard.sample.corp",
     me = client.get(Service.CORE, "Me").json()
 ```
 
+### Device Code Authentication
+
+`DeviceCodeAuth` performs an OAuth 2.0 Device Authorization Grant (RFC 8628)
+login. It is designed for **headless / browser-less** scenarios: the SDK
+requests a device code from the appliance and hands the verification URL and
+user code to a **required** callback. Your code displays that information; the
+user authenticates in their own browser on any device; and the SDK polls until
+the login is approved or the code expires.
+
+The library never prints anything and never opens a browser — displaying the
+`DeviceCodeInfo` is entirely the caller's responsibility.
+
+> **Prerequisite:** The appliance must allow the Device Code grant. Enable it
+> under **Settings → OAuth 2.0 Grant Types / API Settings** by adding
+> `DeviceCode` to the `Allowed OAuth2 Grant Types` setting. When the grant is
+> disabled, login fails with a clear error:
+> `OAuth2 device code grant type is not allowed.`
+
+```Python
+from pysafeguard import SafeguardClient, DeviceCodeAuth, DeviceCodeInfo, Service
+
+def show_device_code(info: DeviceCodeInfo) -> None:
+    # Displaying the URL and code is the caller's responsibility.
+    print(f"Open {info.verification_uri_complete} to sign in")
+    print(f"  Verification URL: {info.verification_uri}")
+    print(f"  User code:        {info.user_code}")
+
+with SafeguardClient("safeguard.sample.corp",
+                     auth=DeviceCodeAuth(show_device_code),
+                     verify="ssl/pathtoca.pem") as client:
+    me = client.get(Service.CORE, "Me").json()
+    print(f"Connected to Safeguard as {me['DisplayName']}")
+```
+
+For async clients the callback may be a coroutine function; its awaitable
+result is awaited. Sync callbacks must be plain functions.
+
+```Python
+from pysafeguard import AsyncSafeguardClient, DeviceCodeAuth, DeviceCodeInfo, Service
+
+async def show_device_code(info: DeviceCodeInfo) -> None:
+    print(f"Open {info.verification_uri_complete} and enter {info.user_code}")
+
+async with AsyncSafeguardClient("safeguard.sample.corp",
+                                auth=DeviceCodeAuth(show_device_code),
+                                verify="ssl/pathtoca.pem") as client:
+    resp = await client.get(Service.CORE, "Me")
+    me = await resp.json()
+```
+
+`DeviceCodeAuth` is interactive and stores no secret, so it cannot refresh
+(`can_refresh` is `False`); obtain a new login when the token expires. Optional
+keyword-only arguments include `scope`, `client_id`, `polling_interval` (auto-
+bumps when the appliance asks the client to slow down), and an `is_cancelled`
+hook for aborting the wait.
+
 ### Async Usage
 
 PySafeguard provides full async support via `AsyncSafeguardClient`:
@@ -524,6 +580,7 @@ from pysafeguard import (
     PasswordAuth,
     CertificateAuth,
     PkceAuth,
+    DeviceCodeAuth,
     TokenAuth,
     Service,
     HttpMethod,

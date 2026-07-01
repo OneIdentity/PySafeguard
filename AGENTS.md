@@ -47,8 +47,11 @@ poetry run python -m pytest tests/ -m integration
 ```
 
 `pytest-asyncio` uses `asyncio_mode = "auto"`. Integration tests auto-skip when
-`SPP_HOST` is unset. For non-trivial auth, API, A2A, or event changes, ask for
-appliance access. See the `testing-guide` skill for fixtures and env vars.
+`SPP_HOST` is unset. The Device Code interactive integration test additionally
+requires `SPP_DEVICE_CODE_INTERACTIVE=1` (it waits for a human to approve the
+login in a browser) and stays skipped otherwise. For non-trivial auth, API, A2A,
+or event changes, ask for appliance access. See the `testing-guide` skill for
+fixtures and env vars.
 
 ## Code conventions
 

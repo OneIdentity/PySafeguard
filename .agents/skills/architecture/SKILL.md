@@ -98,6 +98,28 @@ TokenAuth(token: str | HiddenString)
 - `refresh()` always raises `SafeguardError`
 - Token auto-wrapped in `HiddenString`
 
+### DeviceCodeAuth
+
+```python
+DeviceCodeAuth(
+    on_device_code: Callable[[DeviceCodeInfo], None],
+    *,
+    scope: str | None = None,
+    client_id: str = "",
+    polling_interval: int = 5,
+    is_cancelled: Callable[[], bool] | None = None,
+)
+```
+
+- Headless OAuth 2.0 Device Authorization Grant (RFC 8628); the **only**
+  user-interactive login. Never opens a browser or performs display I/O.
+- Hands a `DeviceCodeInfo` (display fields only) to the required
+  `on_device_code` callback, then polls rSTS until approval or expiry.
+- Flow functions live in `device_code.py` (sync) and `async_device_code.py`
+  (async); the async flow awaits the callback result if it is awaitable.
+- Stores no secret — **no `HiddenString` fields and no `dispose()`**.
+- `can_refresh = False`; `refresh()` / `async_refresh()` raise like `TokenAuth`.
+
 ## Adding a New Auth Strategy
 
 1. **Implement the `Auth` protocol** in `auth.py`:

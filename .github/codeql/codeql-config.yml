@@ -1,0 +1,13 @@
+name: "PySafeguard CodeQL config"
+
+# PySafeguard exposes a `verify` parameter (default True) so callers can connect
+# to Safeguard appliances that do not yet have a CA-signed certificate installed
+# (e.g. brand-new or self-signed test appliances). When a caller explicitly opts
+# in with `verify=False`, the SDK disables TLS certificate validation by design.
+# This is an intentional, documented, caller-controlled capability used across the
+# whole SDK (auth.py, async_pkce.py, async_client.py, async_device_code.py), so the
+# `py/request-without-cert-validation` query is treated as a known, accepted pattern
+# and excluded from code scanning for this repository.
+query-filters:
+  - exclude:
+      id: py/request-without-cert-validation
