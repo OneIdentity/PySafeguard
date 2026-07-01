@@ -84,12 +84,9 @@ def _device_code_grant(client: SafeguardClient, *, enabled: bool) -> Iterator[No
 @pytest.fixture()
 def admin_client(spp_host: str, spp_username: str, spp_password: str, spp_verify: bool | str) -> Iterator[SafeguardClient]:
     """Authenticated client (PKCE, no ROG dependency) for toggling settings."""
-    client = SafeguardClient(spp_host, auth=PkceAuth("local", spp_username, spp_password), verify=spp_verify)
-    client.login()
-    try:
+    with SafeguardClient(spp_host, auth=PkceAuth("local", spp_username, spp_password), verify=spp_verify) as client:
+        client.login()
         yield client
-    finally:
-        client.close()
 
 
 class _CancelAfterDisplay:

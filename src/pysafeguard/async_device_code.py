@@ -16,7 +16,6 @@ flow still requires a plain function.
 from __future__ import annotations
 
 import asyncio
-import inspect
 import ssl
 import time
 from collections.abc import Awaitable, Callable
@@ -78,7 +77,7 @@ async def async_get_device_code_token(
         info = DeviceCodeInfo.from_device_login(device_login, default_interval=polling_interval)
 
         result = on_device_code(info)
-        if inspect.isawaitable(result):
+        if isinstance(result, Awaitable):
             await result
 
         rsts_access_token = await _async_poll_for_token(
