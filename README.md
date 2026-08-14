@@ -121,25 +121,81 @@ adapting a sample for production, remove `verify=False` and configure trust via
 `REQUESTS_CA_BUNDLE` (and `WEBSOCKET_CLIENT_CA_BUNDLE` if you use SignalR) or
 pass an explicit CA bundle path to `verify`.
 
-### TLS version pinning (opt-in)
+> **TLS 1.3 / SPP 9.0:** if you are connecting to SPP 9.0 (which enables
+> TLS 1.3), see [TLS 1.3 and SPP 9.0](#tls-13-and-spp-90) below — especially
+> if you build your own `aiohttp`/`ssl` context for certificate or A2A auth.
 
-`SafeguardClient`, `AsyncSafeguardClient`, `A2AContext`, and `AsyncA2AContext`
-also accept optional `min_tls_version` and `max_tls_version` arguments
-(`ssl.TLSVersion | None`, default `None` = negotiate normally):
+## TLS 1.3 and SPP 9.0
+
+Starting with **SPP 9.0**, the appliance enables **TLS 1.3**. PySafeguard
+`8.2.0` and later negotiate TLS 1.3 automatically — for most applications there
+is **nothing to change**. Certificate-based login and A2A credential retrieval
+continue to work over TLS 1.3 on both the sync and async clients.
+
+### What changed under the hood
+
+TLS 1.3 moves client-certificate authentication to a **post-handshake**
+exchange (RFC 8446 §4.6.2). Instead of the client presenting its certificate
+during the initial handshake, the server sends a `CertificateRequest` *after*
+the handshake completes, and the client must answer it. Python only answers
+that request when the underlying `ssl.SSLContext` has
+`post_handshake_auth = True`.
+
+- **Sync client (`requests` / `urllib3`):** already enabled by default, so it
+  was never affected.
+- **Async client (`aiohttp`):** PySafeguard now sets `post_handshake_auth`
+  explicitly on the SSL context it builds for certificate/A2A auth. Before
+  `8.2.0`, async certificate and A2A auth failed against SPP 9.0 with
+  `60094 Authorization is denied`.
+
+### Pinning the TLS version (opt-in)
+
+`SafeguardClient`, `AsyncSafeguardClient`, `A2AContext`, `AsyncA2AContext`
+(and the A2A `quick_*` classmethods) accept optional `min_tls_version` and
+`max_tls_version` arguments (`ssl.TLSVersion | None`, default `None` =
+negotiate normally):
 
 ```python
 import ssl
 
-# Require TLS 1.3 (e.g. against SPP 9.0)
+# Require TLS 1.3 (e.g. to enforce it against SPP 9.0)
 client = SafeguardClient("host", auth=auth, min_tls_version=ssl.TLSVersion.TLSv1_3)
 
 # Interim: cap the connection at TLS 1.2
 client = SafeguardClient("host", auth=auth, max_tls_version=ssl.TLSVersion.TLSv1_2)
+
+# Also available on the A2A contexts
+with A2AContext("host", "cert.pem", "key.pem",
+                min_tls_version=ssl.TLSVersion.TLSv1_3) as ctx:
+    password = ctx.retrieve_password(api_key)
 ```
 
-Certificate and A2A authentication work transparently over TLS 1.3: the async
-client enables post-handshake authentication (RFC 8446 §4.6.2), and the sync
-client inherits it from `requests`/`urllib3`.
+The pins govern the client's request transport (all API, token, and A2A
+traffic). Leaving them at `None` lets the platform negotiate the highest
+mutually supported version, which is the recommended default.
+
+### Python-specific gotchas
+
+- **Post-handshake auth is required for cert/A2A auth on TLS 1.3.** If you
+  build your **own** `aiohttp`/`ssl` context instead of letting PySafeguard
+  create it (for example, a custom `AsyncSafeguardClient` subclass or a
+  hand-rolled A2A call), you **must** set `ssl_ctx.post_handshake_auth = True`
+  or cert/A2A auth will fail on SPP 9.0 with error `60094`.
+- **Keep HTTP/1.1 — do not enable HTTP/2.** The post-handshake
+  `CertificateRequest` is disallowed under HTTP/2, so certificate auth breaks
+  over HTTP/2. Both `requests` and `aiohttp` default to HTTP/1.1; PySafeguard
+  relies on that and does not enable HTTP/2.
+- **Your Python `ssl` must be built against OpenSSL 1.1.1 or newer** for
+  TLS 1.3 support. This is true of all supported CPython builds (3.10+), but
+  can bite on old or custom OpenSSL builds; check with
+  `ssl.HAS_TLSv1_3`.
+- **Use the `ssl.TLSVersion` enum**, not integers or strings, for
+  `min_tls_version` / `max_tls_version` (e.g. `ssl.TLSVersion.TLSv1_3`).
+- **A version pin forces a real SSL context even with `verify=False`.** On the
+  async client, `verify=False` normally skips building an SSL context entirely;
+  setting `min_tls_version`/`max_tls_version` makes PySafeguard build one anyway
+  so the floor/ceiling can be applied. Certificate verification stays disabled —
+  only the TLS version bounds are added.
 
 ## Getting Started
 
