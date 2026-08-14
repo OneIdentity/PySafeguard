@@ -121,6 +121,26 @@ adapting a sample for production, remove `verify=False` and configure trust via
 `REQUESTS_CA_BUNDLE` (and `WEBSOCKET_CLIENT_CA_BUNDLE` if you use SignalR) or
 pass an explicit CA bundle path to `verify`.
 
+### TLS version pinning (opt-in)
+
+`SafeguardClient`, `AsyncSafeguardClient`, `A2AContext`, and `AsyncA2AContext`
+also accept optional `min_tls_version` and `max_tls_version` arguments
+(`ssl.TLSVersion | None`, default `None` = negotiate normally):
+
+```python
+import ssl
+
+# Require TLS 1.3 (e.g. against SPP 9.0)
+client = SafeguardClient("host", auth=auth, min_tls_version=ssl.TLSVersion.TLSv1_3)
+
+# Interim: cap the connection at TLS 1.2
+client = SafeguardClient("host", auth=auth, max_tls_version=ssl.TLSVersion.TLSv1_2)
+```
+
+Certificate and A2A authentication work transparently over TLS 1.3: the async
+client enables post-handshake authentication (RFC 8446 §4.6.2), and the sync
+client inherits it from `requests`/`urllib3`.
+
 ## Getting Started
 
 > **Note:** Recent versions of Safeguard have Resource Owner Grant (ROG)

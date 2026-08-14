@@ -18,6 +18,7 @@ Example::
 from __future__ import annotations
 
 import json
+import ssl
 import typing
 from collections.abc import Mapping
 from pathlib import Path
@@ -25,6 +26,7 @@ from types import TracebackType
 from typing import IO, TYPE_CHECKING
 
 from requests import Response, Session
+from requests.adapters import HTTPAdapter
 from requests.structures import CaseInsensitiveDict
 
 from .auth import Auth
@@ -39,6 +41,41 @@ DEFAULT_TIMEOUT = 300
 DEFAULT_STREAM_CHUNK_SIZE = 8192
 
 
+class _TlsVersionAdapter(HTTPAdapter):
+    """``requests`` adapter that pins the negotiated TLS version.
+
+    Uses urllib3's native ``ssl_minimum_version`` / ``ssl_maximum_version``
+    pool options so the existing certificate-verification behavior (CA
+    bundle handling, per-request client certs, and post-handshake auth,
+    which urllib3 enables by default) is preserved unchanged.
+    """
+
+    def __init__(
+        self,
+        min_tls_version: ssl.TLSVersion | None,
+        max_tls_version: ssl.TLSVersion | None,
+    ) -> None:
+        self._min_tls_version = min_tls_version
+        self._max_tls_version = max_tls_version
+        super().__init__()
+
+    def _tls_kwargs(self) -> dict[str, ssl.TLSVersion]:
+        kwargs: dict[str, ssl.TLSVersion] = {}
+        if self._min_tls_version is not None:
+            kwargs["ssl_minimum_version"] = self._min_tls_version
+        if self._max_tls_version is not None:
+            kwargs["ssl_maximum_version"] = self._max_tls_version
+        return kwargs
+
+    def init_poolmanager(self, *args: typing.Any, **kwargs: typing.Any) -> None:
+        kwargs.update(self._tls_kwargs())
+        super().init_poolmanager(*args, **kwargs)
+
+    def proxy_manager_for(self, *args: typing.Any, **kwargs: typing.Any) -> typing.Any:
+        kwargs.update(self._tls_kwargs())
+        return super().proxy_manager_for(*args, **kwargs)
+
+
 class SafeguardClient:
     """Synchronous client for the One Identity Safeguard Web API.
 
@@ -51,6 +88,12 @@ class SafeguardClient:
     :param timeout: Request timeout in seconds (default 300).
     :param auto_refresh: If ``True``, automatically refresh the token before
         each request when the token has expired.
+    :param min_tls_version: Optional minimum TLS version to negotiate (e.g.
+        ``ssl.TLSVersion.TLSv1_3`` to require TLS 1.3). ``None`` (default)
+        negotiates normally.
+    :param max_tls_version: Optional maximum TLS version to negotiate (e.g.
+        ``ssl.TLSVersion.TLSv1_2`` to cap at TLS 1.2). ``None`` (default)
+        negotiates normally.
     """
 
     def __init__(
@@ -62,17 +105,25 @@ class SafeguardClient:
         api_version: LiteralString = "v4",
         timeout: int = DEFAULT_TIMEOUT,
         auto_refresh: bool = False,
+        min_tls_version: ssl.TLSVersion | None = None,
+        max_tls_version: ssl.TLSVersion | None = None,
     ) -> None:
         self.host = host
         self.verify = verify
         self.api_version = api_version
         self.auto_refresh = auto_refresh
+        self._min_tls_version = min_tls_version
+        self._max_tls_version = max_tls_version
 
         self._auth = auth
         self._user_token: str | None = None
         self._timeout = timeout
         self._session = Session()
         self._session.verify = verify
+        # Only override transport TLS when a version pin is requested, so the
+        # default path keeps requests/urllib3's stock behavior untouched.
+        if min_tls_version is not None or max_tls_version is not None:
+            self._session.mount("https://", _TlsVersionAdapter(min_tls_version, max_tls_version))
         self._headers = CaseInsensitiveDict({"accept": "application/json"})
 
     # -- Properties ----------------------------------------------------------

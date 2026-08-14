@@ -33,6 +33,7 @@ Usage::
 
 from __future__ import annotations
 
+import ssl
 import typing
 from typing import TYPE_CHECKING
 from types import TracebackType
@@ -56,6 +57,10 @@ class A2AContext:
     :param key_file: Path to the certificate private key.
     :param verify: TLS verification — ``True``, ``False``, or a CA bundle path.
     :param api_version: API version (default ``"v4"``).
+    :param min_tls_version: Optional minimum TLS version to negotiate (e.g.
+        ``ssl.TLSVersion.TLSv1_3``). ``None`` (default) negotiates normally.
+    :param max_tls_version: Optional maximum TLS version to negotiate (e.g.
+        ``ssl.TLSVersion.TLSv1_2``). ``None`` (default) negotiates normally.
     """
 
     def __init__(
@@ -66,6 +71,8 @@ class A2AContext:
         *,
         verify: bool | str = True,
         api_version: LiteralString = "v4",
+        min_tls_version: ssl.TLSVersion | None = None,
+        max_tls_version: ssl.TLSVersion | None = None,
     ) -> None:
         if not cert_file or not key_file:
             raise ValueError("cert_file and key_file are required for A2A context")
@@ -75,7 +82,13 @@ class A2AContext:
         self._verify = verify
         self._api_version = api_version
 
-        self._conn = SafeguardClient(host, verify=verify, api_version=api_version)
+        self._conn = SafeguardClient(
+            host,
+            verify=verify,
+            api_version=api_version,
+            min_tls_version=min_tls_version,
+            max_tls_version=max_tls_version,
+        )
         self._user_authenticated = False
 
     # -- lifecycle -----------------------------------------------------------
@@ -281,6 +294,8 @@ class A2AContext:
         *,
         verify: bool | str = True,
         api_version: LiteralString = "v4",
+        min_tls_version: ssl.TLSVersion | None = None,
+        max_tls_version: ssl.TLSVersion | None = None,
     ) -> HiddenString:
         """One-shot password retrieval without creating a context.
 
@@ -290,9 +305,19 @@ class A2AContext:
         :param key_file: Path to certificate key.
         :param verify: TLS verification setting.
         :param api_version: API version.
+        :param min_tls_version: Optional minimum TLS version to negotiate.
+        :param max_tls_version: Optional maximum TLS version to negotiate.
         :returns: The password wrapped in a :class:`~pysafeguard.HiddenString`.
         """
-        with cls(host, cert_file, key_file, verify=verify, api_version=api_version) as ctx:
+        with cls(
+            host,
+            cert_file,
+            key_file,
+            verify=verify,
+            api_version=api_version,
+            min_tls_version=min_tls_version,
+            max_tls_version=max_tls_version,
+        ) as ctx:
             return ctx.retrieve_password(api_key)
 
     @classmethod
@@ -306,6 +331,8 @@ class A2AContext:
         key_format: SshKeyFormat = SshKeyFormat.OPENSSH,
         verify: bool | str = True,
         api_version: LiteralString = "v4",
+        min_tls_version: ssl.TLSVersion | None = None,
+        max_tls_version: ssl.TLSVersion | None = None,
     ) -> HiddenString:
         """One-shot private key retrieval without creating a context.
 
@@ -316,9 +343,19 @@ class A2AContext:
         :param key_format: Key format (default :attr:`SshKeyFormat.OPENSSH`).
         :param verify: TLS verification setting.
         :param api_version: API version.
+        :param min_tls_version: Optional minimum TLS version to negotiate.
+        :param max_tls_version: Optional maximum TLS version to negotiate.
         :returns: The private key wrapped in a :class:`~pysafeguard.HiddenString`.
         """
-        with cls(host, cert_file, key_file, verify=verify, api_version=api_version) as ctx:
+        with cls(
+            host,
+            cert_file,
+            key_file,
+            verify=verify,
+            api_version=api_version,
+            min_tls_version=min_tls_version,
+            max_tls_version=max_tls_version,
+        ) as ctx:
             return ctx.retrieve_private_key(api_key, key_format=key_format)
 
     # -- Internal helpers ----------------------------------------------------

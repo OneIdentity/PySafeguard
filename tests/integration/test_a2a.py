@@ -401,6 +401,43 @@ class TestAsyncA2ARetrievePassword:
 
 
 # ===========================================================================
+# A2A over TLS 1.3 (issues #41 / #43)
+# ===========================================================================
+
+
+class TestA2ATls13:
+    """A2A credential retrieval must succeed over an enforced TLS 1.3 handshake.
+
+    Regression guard for the async ``post_handshake_auth`` fix: A2A uses
+    client-certificate auth, which under TLS 1.3 requires answering a
+    post-handshake CertificateRequest.
+    """
+
+    def test_sync_retrieve_password_over_tls13(self, a2a_env):
+        with A2AContext(
+            a2a_env.host,
+            a2a_env.cert_file,
+            a2a_env.key_file,
+            verify=a2a_env.verify,
+            min_tls_version=ssl.TLSVersion.TLSv1_3,
+        ) as a2a:
+            pw = a2a.retrieve_password(a2a_env.api_key)
+            assert pw.value == a2a_env.original_password
+
+    @pytest.mark.asyncio
+    async def test_async_retrieve_password_over_tls13(self, a2a_env):
+        async with AsyncA2AContext(
+            a2a_env.host,
+            a2a_env.cert_file,
+            a2a_env.key_file,
+            verify=a2a_env.verify,
+            min_tls_version=ssl.TLSVersion.TLSv1_3,
+        ) as a2a:
+            pw = await a2a.retrieve_password(a2a_env.api_key)
+            assert pw.value == a2a_env.original_password
+
+
+# ===========================================================================
 # A2A event listener lifecycle tests
 # ===========================================================================
 

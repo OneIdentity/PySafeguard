@@ -249,6 +249,22 @@ Helpful environment variables for appliance environments that use an internal CA
 - `REQUESTS_CA_BUNDLE` for HTTP requests
 - `WEBSOCKET_CLIENT_CA_BUNDLE` for SignalR/WebSocket traffic
 
+#### TLS 1.3 (SPP 9.0)
+
+If **async** A2A credential retrieval or `CertificateAuth` login fails on SPP 9.0 with `60094 Authorization is denied` while the **sync** path works, the cause is TLS 1.3 post-handshake authentication. The async `SSLContext` must set `post_handshake_auth = True` (done in `AsyncSafeguardClient._create_ssl_context`); without it the client never answers the server's post-handshake `CertificateRequest`. The sync (`requests`/urllib3) path enables this by default.
+
+To force a TLS version, pass the opt-in `min_tls_version` / `max_tls_version` (`ssl.TLSVersion | None`) to `A2AContext` / `AsyncA2AContext` (also on `SafeguardClient` / `AsyncSafeguardClient` and the `quick_*` classmethods). Examples:
+
+```python
+import ssl
+# Require TLS 1.3
+A2AContext(host, cert, key, min_tls_version=ssl.TLSVersion.TLSv1_3)
+# Interim: cap at TLS 1.2
+A2AContext(host, cert, key, max_tls_version=ssl.TLSVersion.TLSv1_2)
+```
+
+Defaults are `None` (negotiate normally). Cert auth requires HTTP/1.1 — never enable HTTP/2, which disallows the post-handshake `CertificateRequest`.
+
 ### Safe debugging rules
 
 - never print or log `password.value` or private-key plaintext in committed samples/tests

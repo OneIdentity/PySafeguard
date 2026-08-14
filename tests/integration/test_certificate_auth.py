@@ -241,3 +241,44 @@ class TestAsyncCertificateAuth:
             assert client.is_authenticated
             resp = await client.get(Service.CORE, "Me")
             assert resp.status == 200
+
+
+# ===========================================================================
+# TLS 1.3 enforcement (issues #41 / #43)
+# ===========================================================================
+
+
+class TestCertificateAuthTls13:
+    """Certificate auth must succeed over TLS 1.3 on SPP 9.0.
+
+    Pinning the minimum version to TLS 1.3 forces a TLS 1.3 handshake, which
+    on cert auth requires the client to answer a post-handshake
+    CertificateRequest. This is the regression guard for the async
+    ``post_handshake_auth`` fix; the sync path is included for parity.
+    """
+
+    def test_sync_cert_auth_over_tls13(self, cert_env):
+        with SafeguardClient(
+            cert_env.host,
+            auth=CertificateAuth(cert_env.cert_file, cert_env.key_file),
+            verify=cert_env.verify,
+            min_tls_version=ssl.TLSVersion.TLSv1_3,
+        ) as client:
+            assert client.is_authenticated
+            resp = client.get(Service.CORE, "Me")
+            assert resp.status_code == 200
+            assert resp.json()["Name"] == "PySg_CertAuthUser"
+
+    @pytest.mark.asyncio
+    async def test_async_cert_auth_over_tls13(self, cert_env):
+        async with AsyncSafeguardClient(
+            cert_env.host,
+            auth=CertificateAuth(cert_env.cert_file, cert_env.key_file),
+            verify=cert_env.verify,
+            min_tls_version=ssl.TLSVersion.TLSv1_3,
+        ) as client:
+            assert client.is_authenticated
+            resp = await client.get(Service.CORE, "Me")
+            assert resp.status == 200
+            me = await resp.json()
+            assert me["Name"] == "PySg_CertAuthUser"
