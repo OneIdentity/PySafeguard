@@ -82,6 +82,12 @@ def a2a_env(spp_host, spp_username, spp_password, spp_verify):
     env.admin_client = SafeguardClient(spp_host, auth=PasswordAuth("local", spp_username, spp_password), verify=spp_verify)
     env.admin_client.login()
 
+    # --- ensure the appliance A2A service is running ---
+    # A freshly provisioned appliance ships with the A2A service stopped, so
+    # every credential retrieval would fail with 503 "The A2A service is
+    # disabled." Start it here so the suite can run against a clean appliance.
+    _ensure_a2a_service(env.admin_client)
+
     # --- create test admin with asset/policy roles ---
     r = env.admin_client.post(
         Service.CORE,
@@ -259,6 +265,20 @@ def a2a_env(spp_host, spp_username, spp_password, spp_verify):
     import shutil
 
     shutil.rmtree(env.tmpdir, ignore_errors=True)
+
+
+def _ensure_a2a_service(client: SafeguardClient) -> None:
+    """Ensure the appliance A2A service is running.
+
+    A freshly provisioned appliance has the A2A service stopped, which makes
+    every A2A credential call fail with 503 "The A2A service is disabled."
+    Enabling it requires ApplianceAdmin. Idempotent: no-op if already running.
+    """
+    resp = client.get(Service.APPLIANCE, "A2AService")
+    if resp.status_code == 200 and resp.json().get("IsRunning"):
+        return
+    r = client.post(Service.APPLIANCE, "A2AService/Enable")
+    assert r.status_code in (200, 204), f"Enable A2A service failed: {r.status_code} {r.text[:300]}"
 
 
 def _safe_delete(client: SafeguardClient, service: Service, endpoint: str) -> None:
