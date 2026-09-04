@@ -69,11 +69,13 @@ class _TlsVersionAdapter(HTTPAdapter):
 
     def init_poolmanager(self, *args: typing.Any, **kwargs: typing.Any) -> None:
         kwargs.update(self._tls_kwargs())
-        super().init_poolmanager(*args, **kwargs)
+        # requests types these adapter hooks as untyped, so the super() call
+        # trips disallow_untyped_calls even though the override itself is typed.
+        super().init_poolmanager(*args, **kwargs)  # type: ignore[no-untyped-call]
 
     def proxy_manager_for(self, *args: typing.Any, **kwargs: typing.Any) -> typing.Any:
         kwargs.update(self._tls_kwargs())
-        return super().proxy_manager_for(*args, **kwargs)
+        return super().proxy_manager_for(*args, **kwargs)  # type: ignore[no-untyped-call]
 
 
 class SafeguardClient:
