@@ -49,6 +49,12 @@ class AsyncSafeguardClient:
     :param timeout: Request timeout in seconds (default 300).
     :param auto_refresh: If ``True``, automatically refresh the token before
         each request when the token has expired.
+    :param min_tls_version: Optional minimum TLS version to negotiate (e.g.
+        ``ssl.TLSVersion.TLSv1_3`` to require TLS 1.3). ``None`` (default)
+        negotiates normally.
+    :param max_tls_version: Optional maximum TLS version to negotiate (e.g.
+        ``ssl.TLSVersion.TLSv1_2`` to cap at TLS 1.2). ``None`` (default)
+        negotiates normally.
     """
 
     def __init__(
@@ -60,11 +66,15 @@ class AsyncSafeguardClient:
         api_version: LiteralString = "v4",
         timeout: int = DEFAULT_TIMEOUT,
         auto_refresh: bool = False,
+        min_tls_version: ssl.TLSVersion | None = None,
+        max_tls_version: ssl.TLSVersion | None = None,
     ) -> None:
         self.host = host
         self.verify = verify
         self.api_version = api_version
         self.auto_refresh = auto_refresh
+        self._min_tls_version = min_tls_version
+        self._max_tls_version = max_tls_version
 
         self._auth = auth
         self._user_token: str | None = None
@@ -436,7 +446,7 @@ class AsyncSafeguardClient:
 
     def _create_ssl_context(self, cert: tuple[str, str] | None = None) -> ssl.SSLContext | bool:
         """Build an SSL context based on verification and client certificate settings."""
-        if self.verify is False and cert is None:
+        if self.verify is False and cert is None and self._min_tls_version is None and self._max_tls_version is None:
             return False
 
         ctx = SSLContext(ssl.PROTOCOL_TLS_CLIENT)
@@ -447,6 +457,16 @@ class AsyncSafeguardClient:
             ctx.verify_mode = ssl.CERT_NONE
         if cert is not None:
             ctx.load_cert_chain(cert[0], cert[1])
+        # Enable post-handshake authentication (RFC 8446 s4.6.2) so the client
+        # answers the server's post-handshake CertificateRequest under TLS 1.3.
+        # Without this, aiohttp certificate/A2A auth fails on TLS 1.3 (SPP 9.0)
+        # with error 60094. The sync (requests/urllib3) path enables this by
+        # default, which is why only the async path needed the fix.
+        ctx.post_handshake_auth = True
+        if self._min_tls_version is not None:
+            ctx.minimum_version = self._min_tls_version
+        if self._max_tls_version is not None:
+            ctx.maximum_version = self._max_tls_version
         return ctx
 
     async def _get_session(self) -> ClientSession:

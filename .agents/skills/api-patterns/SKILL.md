@@ -349,6 +349,24 @@ client = SafeguardClient("host", auth=auth, verify=False)
 
 Set these when the appliance uses a certificate signed by an internal CA.
 
+### TLS Version Pinning (opt-in)
+
+`SafeguardClient`, `AsyncSafeguardClient`, `A2AContext`, `AsyncA2AContext`
+(and the A2A `quick_*` classmethods) accept optional `min_tls_version` /
+`max_tls_version` (`ssl.TLSVersion | None`, default `None` = negotiate).
+
+```python
+import ssl
+# Require TLS 1.3 (SPP 9.0)
+client = SafeguardClient("host", auth=auth, min_tls_version=ssl.TLSVersion.TLSv1_3)
+# Interim: cap at TLS 1.2
+client = SafeguardClient("host", auth=auth, max_tls_version=ssl.TLSVersion.TLSv1_2)
+```
+
+Pins govern the client's request transport (all API, token, and A2A calls).
+Async cert/A2A auth enables `post_handshake_auth` so it works over TLS 1.3;
+the sync path enables it by default. Keep HTTP/1.1 (no HTTP/2).
+
 ## Common Patterns
 
 ### Query parameters

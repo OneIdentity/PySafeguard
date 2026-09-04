@@ -79,6 +79,23 @@ and publishing workflow.
 - Prefer CA bundle verification over `verify=False`; use
   `REQUESTS_CA_BUNDLE` / `WEBSOCKET_CLIENT_CA_BUNDLE` when needed.
 
+### TLS 1.3
+
+SPP 9.0 enables TLS 1.3. Certificate/A2A auth over TLS 1.3 needs
+post-handshake authentication (RFC 8446 §4.6.2): the sync (`requests`/urllib3)
+path enables it by default, and the async (`aiohttp`) path enables
+`post_handshake_auth` in `AsyncSafeguardClient._create_ssl_context`. Do not
+remove it or async cert/A2A auth fails on 9.0 (error 60094).
+
+Both clients and both A2A contexts accept optional, opt-in
+`min_tls_version` / `max_tls_version` (`ssl.TLSVersion | None`, default
+`None` = negotiate). They govern the client's request transport (all API,
+token, and A2A traffic): async applies them in `_create_ssl_context`; sync
+mounts a `_TlsVersionAdapter` using urllib3's native
+`ssl_minimum_version` / `ssl_maximum_version` only when a pin is set, so the
+default path is unchanged. Keep HTTP/1.1 (never enable HTTP/2), since cert
+auth's post-handshake CertificateRequest is disallowed under HTTP/2.
+
 ## Versioning
 
 `pyproject.toml` holds the base semantic version. CI stamps tagged releases and

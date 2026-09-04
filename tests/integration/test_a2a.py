@@ -82,6 +82,12 @@ def a2a_env(spp_host, spp_username, spp_password, spp_verify):
     env.admin_client = SafeguardClient(spp_host, auth=PasswordAuth("local", spp_username, spp_password), verify=spp_verify)
     env.admin_client.login()
 
+    # --- ensure the appliance A2A service is running ---
+    # A freshly provisioned appliance ships with the A2A service stopped, so
+    # every credential retrieval would fail with 503 "The A2A service is
+    # disabled." Start it here so the suite can run against a clean appliance.
+    _ensure_a2a_service(env.admin_client)
+
     # --- create test admin with asset/policy roles ---
     r = env.admin_client.post(
         Service.CORE,
@@ -261,6 +267,20 @@ def a2a_env(spp_host, spp_username, spp_password, spp_verify):
     shutil.rmtree(env.tmpdir, ignore_errors=True)
 
 
+def _ensure_a2a_service(client: SafeguardClient) -> None:
+    """Ensure the appliance A2A service is running.
+
+    A freshly provisioned appliance has the A2A service stopped, which makes
+    every A2A credential call fail with 503 "The A2A service is disabled."
+    Enabling it requires ApplianceAdmin. Idempotent: no-op if already running.
+    """
+    resp = client.get(Service.APPLIANCE, "A2AService")
+    if resp.status_code == 200 and resp.json().get("IsRunning"):
+        return
+    r = client.post(Service.APPLIANCE, "A2AService/Enable")
+    assert r.status_code in (200, 204), f"Enable A2A service failed: {r.status_code} {r.text[:300]}"
+
+
 def _safe_delete(client: SafeguardClient, service: Service, endpoint: str) -> None:
     """Best-effort deletion — swallow errors so cleanup continues."""
     try:
@@ -398,6 +418,43 @@ class TestAsyncA2ARetrievePassword:
         async with AsyncA2AContext(a2a_env.host, a2a_env.cert_file, a2a_env.key_file, verify=a2a_env.verify) as a2a:
             accounts = await a2a.get_retrievable_accounts()
             assert len(accounts) >= 1
+
+
+# ===========================================================================
+# A2A over TLS 1.3 (issues #41 / #43)
+# ===========================================================================
+
+
+class TestA2ATls13:
+    """A2A credential retrieval must succeed over an enforced TLS 1.3 handshake.
+
+    Regression guard for the async ``post_handshake_auth`` fix: A2A uses
+    client-certificate auth, which under TLS 1.3 requires answering a
+    post-handshake CertificateRequest.
+    """
+
+    def test_sync_retrieve_password_over_tls13(self, a2a_env):
+        with A2AContext(
+            a2a_env.host,
+            a2a_env.cert_file,
+            a2a_env.key_file,
+            verify=a2a_env.verify,
+            min_tls_version=ssl.TLSVersion.TLSv1_3,
+        ) as a2a:
+            pw = a2a.retrieve_password(a2a_env.api_key)
+            assert pw.value == a2a_env.original_password
+
+    @pytest.mark.asyncio
+    async def test_async_retrieve_password_over_tls13(self, a2a_env):
+        async with AsyncA2AContext(
+            a2a_env.host,
+            a2a_env.cert_file,
+            a2a_env.key_file,
+            verify=a2a_env.verify,
+            min_tls_version=ssl.TLSVersion.TLSv1_3,
+        ) as a2a:
+            pw = await a2a.retrieve_password(a2a_env.api_key)
+            assert pw.value == a2a_env.original_password
 
 
 # ===========================================================================
